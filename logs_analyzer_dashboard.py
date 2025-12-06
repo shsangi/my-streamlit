@@ -16,6 +16,48 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ==================== THEME MANAGEMENT ====================
+def apply_theme_settings():
+    """Apply theme settings from session state."""
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'system'
+    
+    # Apply theme via CSS
+    theme_css = """
+    <style>
+    .stApp {
+        background-color: var(--background-color);
+        color: var(--text-color);
+    }
+    """
+    
+    if st.session_state.theme == 'dark':
+        theme_css += """
+        :root {
+            --background-color: #0E1117;
+            --text-color: #FAFAFA;
+        }
+        """
+    elif st.session_state.theme == 'light':
+        theme_css += """
+        :root {
+            --background-color: #FFFFFF;
+            --text-color: #31333F;
+        }
+        """
+    else:  # system - uses Streamlit's default
+        theme_css += """
+        :root {
+            --background-color: inherit;
+            --text-color: inherit;
+        }
+        """
+    
+    st.markdown(theme_css, unsafe_allow_html=True)
+
+# Apply theme at the start
+apply_theme_settings()
+
 # ==================== HELPER FUNCTIONS ====================
 def format_duration(seconds):
     """Format seconds into human-readable duration."""
@@ -326,6 +368,16 @@ def main():
         border-radius: 5px;
         font-weight: bold;
     }
+    .theme-button {
+        width: 100%;
+        margin: 2px 0;
+        border-radius: 5px;
+    }
+    .theme-button-active {
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: 2px solid #45a049 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     
@@ -353,6 +405,8 @@ def main():
         st.session_state.downtime_status_filter = "All"
     if 'analysis_time' not in st.session_state:
         st.session_state.analysis_time = None
+    if 'theme' not in st.session_state:
+        st.session_state.theme = 'system'
     
     # ==================== SIDEBAR ====================
     with st.sidebar:
@@ -492,6 +546,82 @@ def main():
                     st.metric("Total Devices", len(summary))
                     st.metric("Online Devices", len(summary[summary['Current_Status'] == '✔️ Online']))
                     st.metric("Offline Devices", len(summary[summary['Current_Status'] == '🔴 Offline']))
+        
+        # ==================== THEME SETTINGS ====================
+        st.markdown("---")
+        
+        # Theme Settings Button
+        theme_expander = st.expander("🎨 Theme Settings", expanded=False)
+        
+        with theme_expander:
+            st.markdown("**Select Theme:**")
+            
+            # Create three columns for theme buttons
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Light theme button
+                light_active = st.session_state.theme == 'light'
+                light_btn = st.button(
+                    "☀️ Light",
+                    key="theme_light",
+                    help="Light theme",
+                    use_container_width=True
+                )
+                if light_btn:
+                    st.session_state.theme = 'light'
+                    apply_theme_settings()
+                    st.rerun()
+                
+                # Add visual indicator for active theme
+                if light_active:
+                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
+            
+            with col2:
+                # Dark theme button
+                dark_active = st.session_state.theme == 'dark'
+                dark_btn = st.button(
+                    "🌙 Dark",
+                    key="theme_dark",
+                    help="Dark theme",
+                    use_container_width=True
+                )
+                if dark_btn:
+                    st.session_state.theme = 'dark'
+                    apply_theme_settings()
+                    st.rerun()
+                
+                # Add visual indicator for active theme
+                if dark_active:
+                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
+            
+            with col3:
+                # System theme button
+                system_active = st.session_state.theme == 'system'
+                system_btn = st.button(
+                    "💻 System",
+                    key="theme_system",
+                    help="Use system default theme",
+                    use_container_width=True
+                )
+                if system_btn:
+                    st.session_state.theme = 'system'
+                    apply_theme_settings()
+                    st.rerun()
+                
+                # Add visual indicator for active theme
+                if system_active:
+                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
+            
+            # Theme description
+            st.markdown("---")
+            st.markdown("**Theme Info:**")
+            if st.session_state.theme == 'light':
+                st.info("☀️ **Light Theme** - Clean and bright interface")
+            elif st.session_state.theme == 'dark':
+                st.info("🌙 **Dark Theme** - Easy on the eyes in low light")
+            else:
+                st.info("💻 **System Theme** - Follows your system settings")
     
     # ==================== MAIN CONTENT ====================
     if 'processed' in st.session_state and st.session_state.processed:
