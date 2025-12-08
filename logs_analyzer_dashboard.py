@@ -231,7 +231,7 @@ def add_bottom_menu_css():
     <style>
     /* Mobile bottom menu styling */
     @media (max-width: 768px) {
-        /* Hide sidebar on mobile if needed */
+        /* Hide default sidebar on mobile */
         [data-testid="stSidebar"] {
             display: none;
         }
@@ -263,6 +263,9 @@ def add_bottom_menu_css():
             min-width: 70px;
             font-size: 12px;
             cursor: pointer;
+            border: none;
+            background: none;
+            font-family: inherit;
         }
         
         .bottom-menu-item:hover {
@@ -273,6 +276,7 @@ def add_bottom_menu_css():
         .bottom-menu-item.active {
             background-color: #262730;
             color: #4ade80;
+            font-weight: bold;
         }
         
         .bottom-menu-icon {
@@ -285,8 +289,25 @@ def add_bottom_menu_css():
             padding-bottom: 80px !important;
         }
         
-        /* Make buttons full width on mobile */
-        .stButton > button {
+        /* Adjust columns layout for mobile */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+        
+        /* Make tables scroll horizontally on mobile */
+        .stDataFrame {
+            overflow-x: auto;
+        }
+        
+        /* Adjust metric cards for mobile */
+        [data-testid="stMetric"] {
+            min-width: 100px;
+        }
+        
+        /* Adjust buttons for mobile */
+        .stButton button {
             width: 100%;
         }
         
@@ -305,70 +326,30 @@ def add_bottom_menu_css():
             width: 100%;
         }
         
-        /* Make columns stack on mobile */
-        [data-testid="column"] {
-            width: 100% !important;
+        /* Hide sections by default, show only active one */
+        .page-section {
+            display: none;
+        }
+        
+        .page-section.active {
+            display: block;
         }
     }
     
-    /* Desktop styles for bottom menu */
+    /* Desktop styles */
     @media (min-width: 769px) {
-        /* Show bottom menu on desktop too */
         .bottom-menu {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(14, 17, 23, 0.95);
-            border: 1px solid #2b313e;
-            border-radius: 12px;
-            padding: 10px 20px;
-            z-index: 9999;
-            display: flex;
-            justify-content: space-around;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            width: auto;
-            min-width: 400px;
-        }
-        
-        .bottom-menu-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 10px 15px;
-            color: #d1d5db;
-            text-decoration: none;
-            border-radius: 8px;
-            transition: all 0.2s;
-            min-width: 80px;
-            font-size: 13px;
-            cursor: pointer;
-            margin: 0 5px;
-        }
-        
-        .bottom-menu-item:hover {
-            background-color: #262730;
-            color: white;
-        }
-        
-        .bottom-menu-item.active {
-            background-color: #262730;
-            color: #4ade80;
-        }
-        
-        .bottom-menu-icon {
-            font-size: 22px;
-            margin-bottom: 4px;
-        }
-        
-        /* Add padding to main content to prevent overlap */
-        .main .block-container {
-            padding-bottom: 100px !important;
+            display: none;
         }
         
         /* Show sidebar on desktop */
         [data-testid="stSidebar"] {
             display: block;
+        }
+        
+        /* On desktop, show all sections */
+        .page-section {
+            display: block !important;
         }
     }
     
@@ -381,280 +362,13 @@ def add_bottom_menu_css():
     .stButton button, .stDownloadButton button, .stSelectbox div {
         min-height: 44px;
     }
-    
-    /* Hide elements with hide-mobile class on mobile */
-    @media (max-width: 768px) {
-        .hide-mobile {
-            display: none !important;
-        }
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# Bottom menu component
-def render_bottom_menu():
-    st.markdown("""
-    <div class="bottom-menu">
-        <div class="bottom-menu-item" onclick="setView('home')" id="menu-home">
-            <div class="bottom-menu-icon">🏠</div>
-            <div>Home</div>
-        </div>
-        <div class="bottom-menu-item" onclick="setView('summary')" id="menu-summary">
-            <div class="bottom-menu-icon">📊</div>
-            <div>Summary</div>
-        </div>
-        <div class="bottom-menu-item" onclick="setView('events')" id="menu-events">
-            <div class="bottom-menu-icon">🔍</div>
-            <div>Events</div>
-        </div>
-    </div>
-    
-    <script>
-    function setView(view) {
-        // Update active menu item
-        document.querySelectorAll('.bottom-menu-item').forEach(item => {
-            item.classList.remove('active');
-        });
-        document.getElementById('menu-' + view).classList.add('active');
-        
-        // Store the selected view
-        localStorage.setItem('selectedView', view);
-        
-        // Trigger Streamlit rerun
-        window.parent.postMessage({
-            type: 'streamlit:setComponentValue',
-            value: view
-        }, '*');
-    }
-    
-    // Initialize active state on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        const savedView = localStorage.getItem('selectedView') || 'home';
-        document.getElementById('menu-' + savedView).classList.add('active');
-    });
-    </script>
-    """, unsafe_allow_html=True)
-
-# Render filters section
-def render_filters_section(df, start_date, end_date, selected_devices, all_devices):
-    with st.container():
-        st.subheader("⚙️ Filters")
-        
-        # Date range selector with validation
-        col1, col2 = st.columns(2)
-        with col1:
-            new_start_date = st.date_input("Start Date", start_date, 
-                                         min_value=start_date, max_value=end_date,
-                                         key="filter_start_date")
-        with col2:
-            new_end_date = st.date_input("End Date", end_date, 
-                                       min_value=start_date, max_value=end_date,
-                                       key="filter_end_date")
-        
-        # Device filter
-        new_selected_devices = st.multiselect(
-            "Select devices (empty = all)",
-            all_devices,
-            default=selected_devices,
-            key="filter_devices"
-        )
-        
-        # Apply filters button
-        if st.button("Apply Filters", type="primary", use_container_width=True):
-            st.session_state.start_date = new_start_date
-            st.session_state.end_date = new_end_date
-            st.session_state.selected_devices = new_selected_devices
-            st.session_state.apply_filters = True
-            st.rerun()
-        
-        # Clear filters button
-        if st.button("Clear Filters", type="secondary", use_container_width=True):
-            st.session_state.selected_devices = []
-            st.session_state.apply_filters = True
-            st.rerun()
-
-# Render home view
-def render_home_view(summary, downtime, current_view):
-    if current_view != "home":
-        return
-    
-    st.header("🏠 Home")
-    
-    # Show metrics
-    total_online = len(summary[summary['Current_Status'] == '✔️ Online']) if not summary.empty else 0
-    total_offline = len(summary[summary['Current_Status'] == '🔴 Offline']) if not summary.empty else 0
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Devices", len(summary) if not summary.empty else 0)
-    with col2:
-        st.metric("✔️ Online", total_online)
-    with col3:
-        st.metric("🔴 Offline", total_offline)
-    
-    # Summary section
-    if not summary.empty:
-        st.subheader(f"📋 Summary ({summary.shape[0]} rows)")
-        
-        # Create display summary
-        display_summary = summary[['Device', 'Current_Status', 'Last_Offline_Time', 
-                                   'Total_DownTime_Events', 'Current_Downtime_Duration', 
-                                   'Total_Downtime_Duration']].copy()
-        
-        # Status filter for summary
-        summary_status_options = ["All", "✔️ Online", "🔴 Offline"]
-        selected_summary_status = st.selectbox(
-            "Filter by Status",
-            options=summary_status_options,
-            index=0,
-            key="home_summary_filter"
-        )
-        
-        # Apply filter
-        if selected_summary_status != "All":
-            filtered_summary = display_summary[display_summary['Current_Status'] == selected_summary_status].copy()
-            st.dataframe(filtered_summary, use_container_width=True)
-        else:
-            st.dataframe(display_summary, use_container_width=True)
-        
-        # Download button for summary
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            display_summary.to_excel(writer, sheet_name='Summary', index=False)
-        
-        st.download_button(
-            label="📥 Download Summary",
-            data=excel_buffer.getvalue(),
-            file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            use_container_width=True
-        )
-    
-    # Downtime events section
-    if not downtime.empty:
-        st.subheader(f"🔍 Downtime Events ({downtime.shape[0]} rows)")
-        
-        # Status filter for downtime
-        downtime_status_options = ["All", "✔️ Completed", "🔴 Ongoing"]
-        selected_downtime_status = st.selectbox(
-            "Filter by Status",
-            options=downtime_status_options,
-            index=0,
-            key="home_downtime_filter"
-        )
-        
-        # Apply filter
-        if selected_downtime_status != "All":
-            status_to_filter = '✔️ Completed' if selected_downtime_status == "✔️ Completed" else '🔴 Ongoing'
-            filtered_downtime = downtime[downtime['Downtime_Status'] == status_to_filter].copy()
-            st.dataframe(filtered_downtime, use_container_width=True)
-        else:
-            st.dataframe(downtime, use_container_width=True)
-        
-        # Download button for downtime
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            downtime.to_excel(writer, sheet_name='Downtime Events', index=False)
-        
-        st.download_button(
-            label="📥 Download Events",
-            data=excel_buffer.getvalue(),
-            file_name=f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            use_container_width=True
-        )
-
-# Render summary view
-def render_summary_view(summary, current_view):
-    if current_view != "summary":
-        return
-    
-    st.header("📊 Summary View")
-    
-    if not summary.empty:
-        # Create display summary
-        display_summary = summary[['Device', 'Current_Status', 'Last_Offline_Time', 
-                                   'Total_DownTime_Events', 'Current_Downtime_Duration', 
-                                   'Total_Downtime_Duration']].copy()
-        
-        st.subheader(f"Summary Table ({display_summary.shape[0]} rows × {display_summary.shape[1]} cols)")
-        
-        # Status filter
-        summary_status_options = ["All", "✔️ Online", "🔴 Offline"]
-        selected_summary_status = st.selectbox(
-            "Filter by Status",
-            options=summary_status_options,
-            index=0,
-            key="summary_view_filter"
-        )
-        
-        # Apply filter
-        if selected_summary_status != "All":
-            filtered_summary = display_summary[display_summary['Current_Status'] == selected_summary_status].copy()
-            st.dataframe(filtered_summary, use_container_width=True)
-            download_data = filtered_summary
-        else:
-            st.dataframe(display_summary, use_container_width=True)
-            download_data = display_summary
-        
-        # Download button
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            download_data.to_excel(writer, sheet_name='Summary', index=False)
-        
-        st.download_button(
-            label="📥 Download Summary Excel",
-            data=excel_buffer.getvalue(),
-            file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            use_container_width=True
-        )
-    else:
-        st.info("No summary data available.")
-
-# Render events view
-def render_events_view(downtime, current_view):
-    if current_view != "events":
-        return
-    
-    st.header("🔍 Events View")
-    
-    if not downtime.empty:
-        st.subheader(f"Downtime Events ({downtime.shape[0]} rows × {downtime.shape[1]} cols)")
-        
-        # Status filter
-        downtime_status_options = ["All", "✔️ Completed", "🔴 Ongoing"]
-        selected_downtime_status = st.selectbox(
-            "Filter by Status",
-            options=downtime_status_options,
-            index=0,
-            key="events_view_filter"
-        )
-        
-        # Apply filter
-        if selected_downtime_status != "All":
-            status_to_filter = '✔️ Completed' if selected_downtime_status == "✔️ Completed" else '🔴 Ongoing'
-            filtered_downtime = downtime[downtime['Downtime_Status'] == status_to_filter].copy()
-            st.dataframe(filtered_downtime, use_container_width=True)
-            download_data = filtered_downtime
-        else:
-            st.dataframe(downtime, use_container_width=True)
-            download_data = downtime
-        
-        # Download button
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-            download_data.to_excel(writer, sheet_name='Downtime Events', index=False)
-        
-        st.download_button(
-            label="📥 Download Events Excel",
-            data=excel_buffer.getvalue(),
-            file_name=f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            use_container_width=True
-        )
-    else:
-        st.info("No downtime events available.")
+# Initialize session state for current page
+def init_session_state():
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'summary'
 
 # Streamlit App
 def main():
@@ -667,11 +381,14 @@ def main():
     # Add custom CSS for mobile
     add_bottom_menu_css()
     
+    # Initialize session state
+    init_session_state()
+    
     # Get Ghana time
     ghana_time = get_ghana_time()
     current_time_str = ghana_time.strftime("%Y-%m-%d %H:%M:%S %Z")
     
-    # Add timestamp display at the top with small font - shows Ghana time
+    # Header with timestamp
     st.markdown(
         f'<div style="text-align: right; font-size: 0.8em; color: #666; margin-bottom: 10px;">'
         f'⏰ Analysis time (Ghana/Accra): {current_time_str}'
@@ -681,138 +398,369 @@ def main():
     
     st.title("📊 Device Downtime Report")
     
+    # Initialize session state for status filters
+    if 'summary_status_filter' not in st.session_state:
+        st.session_state.summary_status_filter = "All"
+    if 'downtime_status_filter' not in st.session_state:
+        st.session_state.downtime_status_filter = "All"
+    if 'analysis_time' not in st.session_state:
+        st.session_state.analysis_time = None
+    
     # Initialize session state
-    if 'current_view' not in st.session_state:
-        st.session_state.current_view = "home"
     if 'processed' not in st.session_state:
         st.session_state.processed = False
     if 'data_loaded' not in st.session_state:
         st.session_state.data_loaded = False
-    if 'apply_filters' not in st.session_state:
-        st.session_state.apply_filters = False
+    if 'last_error' not in st.session_state:
+        st.session_state.last_error = None
     
-    # Handle view change from JavaScript
-    if 'view' in st.query_params:
-        st.session_state.current_view = st.query_params['view']
-    
-    # Create a container for the main content
-    main_container = st.container()
-    
-    # Sidebar for file upload and controls
+    # Sidebar for controls
     with st.sidebar:
-        st.header("📁 Data Upload")
+        st.header("Report Controls")
         
         # File upload
         uploaded_file = st.file_uploader("Upload CSV File", type=['csv'], 
-                                         help="Upload your device downtime CSV file")
+                                         on_change=lambda: st.session_state.update({
+                                             "data_loaded": False, 
+                                             "processed": False,
+                                             "last_error": None,
+                                             "summary_status_filter": "All",
+                                             "downtime_status_filter": "All",
+                                             "analysis_time": None,
+                                             "current_page": "summary"
+                                         }))
         
-        if uploaded_file is not None:
+        # Auto-process when file is uploaded
+        if uploaded_file is not None and not st.session_state.data_loaded:
             try:
-                if 'df' not in st.session_state or st.session_state.data_loaded == False:
-                    with st.spinner("Loading and processing data..."):
-                        df = pd.read_csv(uploaded_file)
-                        
-                        # Data preprocessing
-                        df['Record Time Format'] = pd.to_datetime(
-                            df['Record Time'], 
-                            dayfirst=True,
-                            errors='coerce'
-                        )
-                        df['Record Time'] = df['Record Time Format']
-                        df = df.drop(columns=['Record Time Format'], errors='ignore')
-                        
-                        # Filter encoding records
-                        df = df[df['Type'].str.contains('encoding', case=False, na=False)]
-                        
-                        # Create status column
-                        df['status'] = 'unknown'
-                        df.loc[df['Type'].str.contains('online', case=False, na=False), 'status'] = 'online'
-                        df.loc[df['Type'].str.contains('offline', case=False, na=False), 'status'] = 'offline'
-                        df = df.drop(columns=['Type'], errors='ignore')
-                        
-                        df = df.sort_values(by=['Device Name', 'Record Time'], ascending=[True, True])
-                        
-                        # Store the processed dataframe in session state
-                        st.session_state.df = df
-                        st.session_state.data_loaded = True
-                        
-                        # Set default date range
-                        min_date = df['Record Time'].min().date()
-                        max_date = df['Record Time'].max().date()
-                        st.session_state.start_date = min_date
-                        st.session_state.end_date = max_date
-                        st.session_state.selected_devices = []
-                        
-                        st.success(f"✅ File loaded successfully!")
-                        st.info(f"Total records: {len(df)}")
-            except Exception as e:
-                st.error(f"Error loading file: {str(e)}")
-        
-        # Show filters section in sidebar when data is loaded
-        if 'df' in st.session_state and st.session_state.data_loaded:
-            df = st.session_state.df
-            
-            # Initialize date range if not set
-            if 'start_date' not in st.session_state:
-                min_date = df['Record Time'].min().date()
-                max_date = df['Record Time'].max().date()
-                st.session_state.start_date = min_date
-                st.session_state.end_date = max_date
-                st.session_state.selected_devices = []
-            
-            # Get all devices
-            all_devices = sorted(df['Device Name'].unique())
-            
-            # Render filters section
-            render_filters_section(
-                df, 
-                st.session_state.start_date, 
-                st.session_state.end_date,
-                st.session_state.selected_devices,
-                all_devices
-            )
-            
-            # Process data when filters are applied
-            if st.session_state.get('apply_filters', False):
-                with st.spinner("Applying filters..."):
+                with st.spinner("Loading and processing data..."):
+                    df = pd.read_csv(uploaded_file)
+                    
+                    # Data preprocessing
+                    df['Record Time Format'] = pd.to_datetime(
+                        df['Record Time'], 
+                        dayfirst=True,
+                        errors='coerce'
+                    )
+                    df['Record Time'] = df['Record Time Format']
+                    df = df.drop(columns=['Record Time Format'], errors='ignore')
+                    
+                    # Filter encoding records
+                    df = df[df['Type'].str.contains('encoding', case=False, na=False)]
+                    
+                    # Create status column
+                    df['status'] = 'unknown'
+                    df.loc[df['Type'].str.contains('online', case=False, na=False), 'status'] = 'online'
+                    df.loc[df['Type'].str.contains('offline', case=False, na=False), 'status'] = 'offline'
+                    df = df.drop(columns=['Type'], errors='ignore')
+                    
+                    df = df.sort_values(by=['Device Name', 'Record Time'], ascending=[True, True])
+                    
+                    # Store the processed dataframe in session state
+                    st.session_state.df = df
+                    st.session_state.data_loaded = True
+                    
+                    # Auto-process with default settings
+                    min_date = df['Record Time'].min().date()
+                    max_date = df['Record Time'].max().date()
+                    all_devices = sorted(df['Device Name'].unique())
+                    
+                    # Process with ALL devices selected
                     summary, downtime, analysis_time = process_data(
                         df.copy(),
-                        pd.to_datetime(st.session_state.start_date),
-                        pd.to_datetime(st.session_state.end_date),
-                        st.session_state.selected_devices
+                        pd.to_datetime(min_date),
+                        pd.to_datetime(max_date),
+                        []
                     )
                     
+                    # Store in session state
                     st.session_state.summary = summary
                     st.session_state.downtime = downtime
                     st.session_state.analysis_time = analysis_time
                     st.session_state.processed = True
-                    st.session_state.apply_filters = False
                     
-                    st.success("✅ Filters applied!")
-        else:
-            st.info("Upload a CSV file to begin")
-    
-    # Main content area
-    with main_container:
-        # Check if we have processed data
-        if 'processed' in st.session_state and st.session_state.processed:
-            summary = st.session_state.summary
-            downtime = st.session_state.downtime
-            current_view = st.session_state.current_view
+                    st.success(f"File loaded and processed successfully!")
+                    st.info(f"Total records: {len(df)}")
+                    
+            except Exception as e:
+                st.error(f"Error loading file: {str(e)}")
+                st.session_state.last_error = str(e)
+        
+        # Show filters and refresh button if data is loaded
+        if 'df' in st.session_state and st.session_state.data_loaded:
+            df = st.session_state.df
             
-            # Check if we have data
-            if summary.empty and downtime.empty:
-                st.warning("⚠️ No data found for the selected filters. Please adjust your criteria in the sidebar.")
+            # Date range selector with validation
+            st.subheader("📅 Date Range Filter")
+            min_date = df['Record Time'].min().date()
+            max_date = df['Record Time'].max().date()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
+            with col2:
+                end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
+            
+            # Validate date range
+            if start_date > end_date:
+                st.error("❌ Start date must be before end date!")
+                start_date, end_date = end_date, start_date
+            
+            # Device filter
+            st.subheader("📱 Device Filter")
+            all_devices = sorted(df['Device Name'].unique())
+            
+            selected_devices = st.multiselect(
+                "Select devices (empty = all)",
+                all_devices,
+                default=[]
+            )
+            
+            st.write("---")
+            
+            # Refresh Report button
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("🔄 Refresh", use_container_width=True):
+                    try:
+                        with st.spinner("Updating report with new filters..."):
+                            summary, downtime, analysis_time = process_data(
+                                df.copy(),
+                                pd.to_datetime(start_date),
+                                pd.to_datetime(end_date),
+                                selected_devices
+                            )
+                            
+                            if summary.empty and downtime.empty:
+                                st.warning("⚠️ No data found for the selected filters.")
+                            else:
+                                st.session_state.summary = summary
+                                st.session_state.downtime = downtime
+                                st.session_state.analysis_time = analysis_time
+                                st.session_state.processed = True
+                                st.success("✅ Refreshed!")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error updating report: {str(e)}")
+                        st.session_state.last_error = str(e)
+            
+            with col2:
+                if st.button("🗑️ Reset", type="secondary", use_container_width=True):
+                    for key in list(st.session_state.keys()):
+                        del st.session_state[key]
+                    st.rerun()
+            
+            # Show current filter info
+            st.caption(f"📅 Date range: {start_date} to {end_date}")
+            if selected_devices:
+                st.caption(f"📱 Showing {len(selected_devices)} of {len(all_devices)} devices")
             else:
-                # Render the appropriate view based on current_view
-                render_home_view(summary, downtime, current_view)
-                render_summary_view(summary, current_view)
-                render_events_view(downtime, current_view)
+                st.caption(f"📱 Showing all {len(all_devices)} devices")
+        
+        elif uploaded_file is None:
+            st.warning("📁 Please upload a CSV file to begin")
+    
+    # Main content area - Different sections based on current page
+    if 'processed' in st.session_state and st.session_state.processed:
+        summary = st.session_state.summary
+        downtime = st.session_state.downtime
+        
+        # Check if we have data
+        if summary.empty and downtime.empty:
+            st.warning("⚠️ No data found for the selected filters. Please adjust your criteria in the sidebar.")
         else:
-            # Initial state or no file uploaded
-            st.info("👈 Please upload a CSV file using the sidebar to generate reports.")
+            # SUMMARY PAGE
+            with st.container():
+                st.markdown(f'<div class="page-section {"active" if st.session_state.current_page == "summary" else ""}">', unsafe_allow_html=True)
+                
+                # Calculate online and offline counts
+                total_online = len(summary[summary['Current_Status'] == '✔️ Online']) if not summary.empty else 0
+                total_offline = len(summary[summary['Current_Status'] == '🔴 Offline']) if not summary.empty else 0
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        label="Total Devices",
+                        value=len(summary) if not summary.empty else 0,
+                        delta=None
+                    )
+                with col2:
+                    st.metric(
+                        label="Total ✔️ Online",
+                        value=total_online,
+                        delta=None
+                    )
+                with col3:
+                    st.metric(
+                        label="Total 🔴 Offline",
+                        value=total_offline,
+                        delta=None
+                    )
+                
+                st.divider()
+                
+                if not summary.empty:
+                    # Create display summary
+                    display_summary = summary[['Device', 'Current_Status', 'Last_Offline_Time', 
+                                               'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                                               'Total_Downtime_Duration']].copy()
+                    
+                    # Status filter for summary table
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.subheader(f"📋 Summary Table ({display_summary.shape[0]} rows × {display_summary.shape[1]} cols)")
+                    
+                    with col2:
+                        summary_status_options = ["All", "✔️ Online", "🔴 Offline"]
+                        selected_summary_status = st.selectbox(
+                            "Filter by Status",
+                            options=summary_status_options,
+                            index=summary_status_options.index(st.session_state.summary_status_filter) if st.session_state.summary_status_filter in summary_status_options else 0,
+                            key="summary_status_filter_select",
+                            label_visibility="collapsed"
+                        )
+                        
+                        st.session_state.summary_status_filter = selected_summary_status
+                    
+                    # Apply status filter
+                    if st.session_state.summary_status_filter != "All":
+                        filtered_summary = display_summary[display_summary['Current_Status'] == st.session_state.summary_status_filter].copy()
+                        st.caption(f"📊 Showing {len(filtered_summary)} devices with status: {st.session_state.summary_status_filter}")
+                        st.dataframe(filtered_summary, use_container_width=True)
+                    else:
+                        st.dataframe(display_summary, use_container_width=True)
+                else:
+                    st.info("ℹ️ No summary data available for the selected filters.")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
             
-            # Display sample of expected format
+            # DOWNTIME PAGE
+            with st.container():
+                st.markdown(f'<div class="page-section {"active" if st.session_state.current_page == "downtime" else ""}">', unsafe_allow_html=True)
+                
+                if not downtime.empty:
+                    st.subheader(f"🔍 Downtime Events ({downtime.shape[0]} rows × {downtime.shape[1]} cols)")
+                    
+                    # Status filter for downtime table
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write("")
+                    
+                    with col2:
+                        downtime_status_options = ["All", "✔️ Completed", "🔴 Ongoing"]
+                        selected_downtime_status = st.selectbox(
+                            "Filter by Status",
+                            options=downtime_status_options,
+                            index=downtime_status_options.index(st.session_state.downtime_status_filter) if st.session_state.downtime_status_filter in downtime_status_options else 0,
+                            key="downtime_status_filter_select",
+                            label_visibility="collapsed"
+                        )
+                        
+                        st.session_state.downtime_status_filter = selected_downtime_status
+                    
+                    # Apply status filter
+                    if st.session_state.downtime_status_filter != "All":
+                        if st.session_state.downtime_status_filter == "✔️ Completed":
+                            filtered_downtime = downtime[downtime['Downtime_Status'] == '✔️ Completed'].copy()
+                        else:  # "🔴 Ongoing"
+                            filtered_downtime = downtime[downtime['Downtime_Status'] == '🔴 Ongoing'].copy()
+                        
+                        st.caption(f"📊 Showing {len(filtered_downtime)} events with status: {st.session_state.downtime_status_filter}")
+                        st.dataframe(filtered_downtime, use_container_width=True)
+                    else:
+                        st.dataframe(downtime, use_container_width=True)
+                else:
+                    st.info("ℹ️ No downtime events found for the selected filters.")
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            # DOWNLOADS PAGE
+            with st.container():
+                st.markdown(f'<div class="page-section {"active" if st.session_state.current_page == "downloads" else ""}">', unsafe_allow_html=True)
+                
+                st.subheader("📥 Download Reports")
+                
+                if not summary.empty:
+                    # Prepare summary data for download
+                    if st.session_state.summary_status_filter != "All":
+                        download_summary = summary[summary['Current_Status'] == st.session_state.summary_status_filter]
+                    else:
+                        download_summary = summary
+                    
+                    # Create Excel file for summary
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        download_summary[['Device', 'Current_Status', 'Last_Offline_Time', 
+                                         'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                                         'Total_Downtime_Duration']].to_excel(writer, sheet_name='Summary', index=False)
+                    excel_data = excel_buffer.getvalue()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="📥 Download Summary Excel",
+                            data=excel_data,
+                            file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            use_container_width=True
+                        )
+                
+                if not downtime.empty:
+                    # Prepare downtime data for download
+                    if st.session_state.downtime_status_filter != "All":
+                        if st.session_state.downtime_status_filter == "✔️ Completed":
+                            download_downtime = downtime[downtime['Downtime_Status'] == '✔️ Completed']
+                        else:  # "🔴 Ongoing"
+                            download_downtime = downtime[downtime['Downtime_Status'] == '🔴 Ongoing']
+                    else:
+                        download_downtime = downtime
+                    
+                    # Create Excel file for downtime
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        download_downtime.to_excel(writer, sheet_name='Downtime Events', index=False)
+                    excel_data = excel_buffer.getvalue()
+                    
+                    col1, col2 = st.columns(2)
+                    with col2:
+                        st.download_button(
+                            label="📥 Download Downtime Excel",
+                            data=excel_data,
+                            file_name=f"downtime_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            use_container_width=True
+                        )
+                
+                st.divider()
+                
+                # Download all data button
+                if not summary.empty and not downtime.empty:
+                    excel_buffer = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                        summary[['Device', 'Current_Status', 'Last_Offline_Time', 
+                                'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                                'Total_Downtime_Duration']].to_excel(writer, sheet_name='Summary', index=False)
+                        downtime.to_excel(writer, sheet_name='Downtime Events', index=False)
+                    excel_data = excel_buffer.getvalue()
+                    
+                    st.download_button(
+                        label="📦 Download Complete Report",
+                        data=excel_data,
+                        file_name=f"complete_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True
+                    )
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+    
+    else:
+        # HELP PAGE
+        with st.container():
+            st.markdown(f'<div class="page-section {"active" if st.session_state.current_page == "help" else ""}">', unsafe_allow_html=True)
+            
+            st.info("👈 Please upload a CSV file using the sidebar controls to generate reports.")
+            
             with st.expander("📋 Expected CSV Format"):
                 st.code("""
 Required columns:
@@ -826,44 +774,152 @@ Record Time,Device Name,Type
 01-11-2023 10:05:00,Device1,encoding offline
 01-11-2023 10:10:00,Device1,encoding online
                 """)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
     
-    # Add bottom menu (always visible)
-    render_bottom_menu()
+    # FILTERS PAGE (Sidebar controls visible on mobile)
+    with st.container():
+        st.markdown(f'<div class="page-section {"active" if st.session_state.current_page == "filters" else ""}">', unsafe_allow_html=True)
+        
+        st.subheader("⚙️ Filter Settings")
+        
+        if 'df' in st.session_state and st.session_state.data_loaded:
+            df = st.session_state.df
+            
+            # Date range selector
+            min_date = df['Record Time'].min().date()
+            max_date = df['Record Time'].max().date()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Start Date", min_date, min_value=min_date, max_value=max_date, key="mobile_start")
+            with col2:
+                end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date, key="mobile_end")
+            
+            if start_date > end_date:
+                st.error("❌ Start date must be before end date!")
+                start_date, end_date = end_date, start_date
+            
+            # Device filter
+            all_devices = sorted(df['Device Name'].unique())
+            selected_devices = st.multiselect(
+                "Select devices (empty = all)",
+                all_devices,
+                default=[]
+            )
+            
+            if st.button("🔄 Apply Filters", use_container_width=True):
+                try:
+                    with st.spinner("Applying filters..."):
+                        summary, downtime, analysis_time = process_data(
+                            df.copy(),
+                            pd.to_datetime(start_date),
+                            pd.to_datetime(end_date),
+                            selected_devices
+                        )
+                        
+                        if summary.empty and downtime.empty:
+                            st.warning("⚠️ No data found for the selected filters.")
+                        else:
+                            st.session_state.summary = summary
+                            st.session_state.downtime = downtime
+                            st.session_state.analysis_time = analysis_time
+                            st.session_state.processed = True
+                            st.session_state.current_page = "summary"
+                            st.success("✅ Filters applied!")
+                            st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error applying filters: {str(e)}")
+        else:
+            st.info("📁 Upload a CSV file first to access filter settings.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
-    # JavaScript to handle menu clicks and communicate with Streamlit
+    # Bottom menu for mobile
+    st.markdown("""
+    <div class="bottom-menu">
+        <button class="bottom-menu-item %s" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'summary'}, '*')">
+            <div class="bottom-menu-icon">📊</div>
+            <div>Summary</div>
+        </button>
+        <button class="bottom-menu-item %s" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'downtime'}, '*')">
+            <div class="bottom-menu-icon">🔍</div>
+            <div>Downtime</div>
+        </button>
+        <button class="bottom-menu-item %s" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'downloads'}, '*')">
+            <div class="bottom-menu-icon">📥</div>
+            <div>Downloads</div>
+        </button>
+        <button class="bottom-menu-item %s" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'filters'}, '*')">
+            <div class="bottom-menu-icon">⚙️</div>
+            <div>Filters</div>
+        </button>
+        <button class="bottom-menu-item %s" onclick="window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'help'}, '*')">
+            <div class="bottom-menu-icon">❓</div>
+            <div>Help</div>
+        </button>
+    </div>
+    """ % (
+        "active" if st.session_state.current_page == "summary" else "",
+        "active" if st.session_state.current_page == "downtime" else "",
+        "active" if st.session_state.current_page == "downloads" else "",
+        "active" if st.session_state.current_page == "filters" else "",
+        "active" if st.session_state.current_page == "help" else ""
+    ), unsafe_allow_html=True)
+    
+    # JavaScript to handle bottom menu clicks
     st.markdown("""
     <script>
-    // Function to handle menu clicks
-    function handleMenuClick(view) {
-        // Update URL with view parameter
-        const url = new URL(window.location);
-        url.searchParams.set('view', view);
-        window.history.pushState({}, '', url);
-        
-        // Trigger Streamlit rerun
-        window.location.reload();
-    }
-    
-    // Attach click handlers to menu items
-    document.addEventListener('DOMContentLoaded', function() {
-        // Get current view from URL or default to 'home'
-        const urlParams = new URLSearchParams(window.location.search);
-        const currentView = urlParams.get('view') || 'home';
-        
-        // Update active menu item
-        document.querySelectorAll('.bottom-menu-item').forEach(item => {
-            item.classList.remove('active');
-            if (item.id === 'menu-' + currentView) {
-                item.classList.add('active');
-            }
+    // Listen for messages from bottom menu
+    window.addEventListener('message', function(event) {
+        if (event.data.type === 'streamlit:setComponentValue') {
+            // Update the current page in Streamlit session state
+            const page = event.data.value;
             
-            // Update click handlers
-            const view = item.id.replace('menu-', '');
-            item.onclick = function() { handleMenuClick(view); };
-        });
+            // Send message back to Streamlit to update session state
+            window.parent.postMessage({
+                type: 'streamlit:setComponentValue',
+                value: page
+            }, '*');
+            
+            // Update active state in the menu
+            document.querySelectorAll('.bottom-menu-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.textContent.includes(page.charAt(0).toUpperCase() + page.slice(1))) {
+                    item.classList.add('active');
+                }
+            });
+        }
     });
     </script>
     """, unsafe_allow_html=True)
+    
+    # Create a hidden component to trigger rerun when page changes
+    page_changed = st.checkbox("Page changed", value=False, key="page_changed", label_visibility="collapsed")
+    
+    # Create buttons to change pages (hidden, used by JavaScript)
+    cols = st.columns(5)
+    with cols[0]:
+        if st.button("Go to Summary", key="goto_summary", type="secondary", use_container_width=True):
+            st.session_state.current_page = "summary"
+            st.rerun()
+    with cols[1]:
+        if st.button("Go to Downtime", key="goto_downtime", type="secondary", use_container_width=True):
+            st.session_state.current_page = "downtime"
+            st.rerun()
+    with cols[2]:
+        if st.button("Go to Downloads", key="goto_downloads", type="secondary", use_container_width=True):
+            st.session_state.current_page = "downloads"
+            st.rerun()
+    with cols[3]:
+        if st.button("Go to Filters", key="goto_filters", type="secondary", use_container_width=True):
+            st.session_state.current_page = "filters"
+            st.rerun()
+    with cols[4]:
+        if st.button("Go to Help", key="goto_help", type="secondary", use_container_width=True):
+            st.session_state.current_page = "help"
+            st.rerun()
 
 if __name__ == "__main__":
     main()
