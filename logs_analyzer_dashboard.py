@@ -388,7 +388,7 @@ def main():
             st.rerun()
     
     with col4:
-        if st.button("⚙️ Filters", use_container_width=True,
+        if st.button("⚙️ Upload", use_container_width=True,
                     type="primary" if st.session_state.current_tab == "filters" else "secondary"):
             st.session_state.current_tab = "filters"
             st.rerun()
@@ -693,3 +693,4 @@ Record Time,Device Name,Type
 
 if __name__ == "__main__":
     main()
+
