@@ -3,64 +3,10 @@ import numpy as np
 import streamlit as st
 from datetime import datetime, timedelta
 import pytz
-import plotly.express as px
-import plotly.graph_objects as go
-from io import BytesIO
-import base64
+import io 
 
-# ==================== CONFIGURATION ====================
-st.set_page_config(
-    page_title="Advanced Device Downtime Analyzer",
-    layout="wide",
-    page_icon="📊",
-    initial_sidebar_state="expanded"
-)
-
-# ==================== THEME MANAGEMENT ====================
-def apply_theme_settings():
-    """Apply theme settings from session state."""
-    if 'theme' not in st.session_state:
-        st.session_state.theme = 'system'
-    
-    # Apply theme via CSS
-    theme_css = """
-    <style>
-    .stApp {
-        background-color: var(--background-color);
-        color: var(--text-color);
-    }
-    """
-    
-    if st.session_state.theme == 'dark':
-        theme_css += """
-        :root {
-            --background-color: #0E1117;
-            --text-color: #FAFAFA;
-        }
-        """
-    elif st.session_state.theme == 'light':
-        theme_css += """
-        :root {
-            --background-color: #FFFFFF;
-            --text-color: #31333F;
-        }
-        """
-    else:  # system - uses Streamlit's default
-        theme_css += """
-        :root {
-            --background-color: inherit;
-            --text-color: inherit;
-        }
-        """
-    
-    st.markdown(theme_css, unsafe_allow_html=True)
-
-# Apply theme at the start
-apply_theme_settings()
-
-# ==================== HELPER FUNCTIONS ====================
+# Format duration function
 def format_duration(seconds):
-    """Format seconds into human-readable duration."""
     if pd.isna(seconds):
         return ""
     seconds = int(seconds)
@@ -73,56 +19,55 @@ def format_duration(seconds):
         return f"{days}d {hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
+# Get Ghana time (Africa/Accra - GMT/UTC+0)
 def get_ghana_time():
-    """Get current Ghana time."""
+    # Ghana uses GMT/UTC (Accra time - no daylight saving)
     ghana_tz = pytz.timezone('Africa/Accra')
     return datetime.now(ghana_tz)
 
-def create_download_link(df, filename, text):
-    """Create a download link for DataFrame."""
-    buffer = BytesIO()
-    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Data')
-    b64 = base64.b64encode(buffer.getvalue()).decode()
-    return f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">{text}</a>'
-
-def calculate_uptime_percentage(downtime_seconds, total_seconds):
-    """Calculate uptime percentage."""
-    if total_seconds == 0:
-        return 100.0
-    uptime_seconds = total_seconds - downtime_seconds
-    return (uptime_seconds / total_seconds) * 100
-
-# ==================== DATA PROCESSING ====================
+# Process data function with error handling
 def process_data(df, start_date=None, end_date=None, selected_devices=None):
-    """Process data with enhanced analytics."""
     try:
+        # Make a copy to avoid modifying original
         df = df.copy()
         
-        # Filter by date range
+        # Filter by date range if provided
         if start_date and end_date:
             start_date = pd.to_datetime(start_date)
             end_date = pd.to_datetime(end_date)
             df = df[(df['Record Time'] >= start_date) & (df['Record Time'] <= end_date + timedelta(days=1))]
         
-        # Filter by selected devices
+        # Filter by selected devices if provided
         if selected_devices and len(selected_devices) > 0:
             df = df[df['Device Name'].isin(selected_devices)]
         
+        # Check if we have data after filtering
         if df.empty:
-            return pd.DataFrame(), pd.DataFrame(), get_ghana_time()
+            # Return empty dataframes with correct structure
+            empty_summary = pd.DataFrame(columns=[
+                'Device', 'Current_Status', 'Last_Offline_Time', 
+                'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                'Total_Downtime_Duration'
+            ])
+            empty_downtime = pd.DataFrame(columns=[
+                'Device', 'Offline_Time', 'Online_Time', 
+                'Downtime_Duration', 'Downtime_Status'
+            ])
+            return empty_summary, empty_downtime, get_ghana_time()
         
-        # Process downtime
+        # Process downtime - use Ghana time consistently
         current_time = pd.Timestamp.now(tz='Africa/Accra')
         
         df_downtime = (
             df
-            .assign(
-                next_status=df.groupby('Device Name')['status'].shift(-1),
-                next_time=df.groupby('Device Name')['Record Time'].shift(-1),
-                prev_status=df.groupby('Device Name')['status'].shift(1)
-            )
+            .assign(next_status=df.groupby('Device Name')['status'].shift(-1),
+                    next_time=df.groupby('Device Name')['Record Time'].shift(-1),
+                    prev_status=df.groupby('Device Name')['status'].shift(1))
+            
+            # Find all offline periods
             .loc[lambda x: x['status'] == 'offline']
+            
+            # Calculate downtime
             .assign(
                 Downtime_Seconds=lambda x: np.where(
                     x['next_status'] == 'online',
@@ -132,21 +77,34 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 Downtime_Status=lambda x: np.where(
                     x['next_status'] == 'online',
                     'Completed',
-                    np.where(x['prev_status'] == 'online', 'Ongoing', 'Intermediate')
+                    np.where(
+                        x['prev_status'] == 'online',
+                        'Ongoing',
+                        'Intermediate'
+                    )
                 )
             )
-            .rename(columns={'Record Time': 'Offline_Time', 'next_time': 'Online_Time', 'Device Name': 'Device'})
+            .rename(columns={'Record Time': 'Offline_Time', 'next_time': 'Online_Time',
+                             'Device Name': 'Device'})
             [['Device', 'Offline_Time', 'Online_Time', 'Downtime_Seconds', 'Downtime_Status']]
         )
         
+        # Check if we have downtime data
         if df_downtime.empty:
-            return pd.DataFrame(), pd.DataFrame(), current_time
+            # Create empty summary with correct structure
+            empty_summary = pd.DataFrame(columns=[
+                'Device', 'Current_Status', 'Last_Offline_Time', 
+                'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                'Total_Downtime_Duration'
+            ])
+            # Return empty dataframes
+            return empty_summary, df_downtime, current_time
         
         # Fix misclassified records
         mask = (df_downtime['Online_Time'].notna()) & (df_downtime['Downtime_Status'] == 'Ongoing')
         df_downtime.loc[mask, 'Downtime_Status'] = 'Completed'
         
-        # Calculate downtime
+        # Recalculate downtime with error handling
         def recalculate_downtime(row):
             try:
                 if row['Downtime_Status'] == 'Completed':
@@ -154,49 +112,72 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                 elif pd.notna(row['Online_Time']):
                     return (row['Online_Time'] - row['Offline_Time']).total_seconds()
                 else:
+                    # Calculate exact difference from offline time to current Ghana time
                     offline_time = row['Offline_Time']
                     if isinstance(offline_time, pd.Timestamp):
+                        # Ensure offline_time has no timezone for consistent calculation
                         if offline_time.tz is not None:
                             offline_time = offline_time.tz_localize(None)
                         return (current_time.tz_localize(None) - offline_time).total_seconds()
                     else:
+                        # Handle string or other datetime formats
                         offline_time = pd.to_datetime(offline_time)
                         return (current_time.tz_localize(None) - offline_time).total_seconds()
-            except:
+            except Exception as e:
                 return 0
         
+        # Safely assign Downtime_Seconds
         df_downtime = df_downtime.copy()
         df_downtime.loc[:, 'Downtime_Seconds'] = df_downtime.apply(recalculate_downtime, axis=1)
         df_downtime.loc[:, 'Downtime_Duration'] = df_downtime['Downtime_Seconds'].apply(format_duration)
         
-        # Create summary with enhanced metrics
+        # Create summary with Ghana time
         analysis_time = pd.Timestamp.now(tz='Africa/Accra')
+        
+        # Check if we have data to group
+        if df_downtime['Device'].nunique() == 0:
+            empty_summary = pd.DataFrame(columns=[
+                'Device', 'Current_Status', 'Last_Offline_Time', 
+                'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                'Total_Downtime_Duration'
+            ])
+            return empty_summary, df_downtime, analysis_time
         
         summary = (
             df_downtime.groupby('Device')
             .agg({
-                'Offline_Time': ['count', 'first', 'last'],
+                'Offline_Time': 'last',
                 'Online_Time': 'last',
-                'Downtime_Seconds': 'sum',
+                'Downtime_Seconds': ['count', 'sum'],
                 'Downtime_Status': lambda x: (x == 'Ongoing').sum()
             })
             .reset_index()
         )
         
+        # Handle case where summary might be empty
+        if summary.empty:
+            empty_summary = pd.DataFrame(columns=[
+                'Device', 'Current_Status', 'Last_Offline_Time', 
+                'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                'Total_Downtime_Duration'
+            ])
+            return empty_summary, df_downtime, analysis_time
+        
         summary.columns = [
-            'Device', 'Total_Events', 'First_Offline', 'Last_Offline',
-            'Last_Online', 'Total_Downtime_Seconds', 'Ongoing_Count'
+            'Device', 'Last_Offline_Time', 'Last_Online_Time',
+            'Total_DownTime_Events', 'Total_Downtime_Seconds', 'Ongoing_Count'
         ]
         
-        # Calculate enhanced metrics
+        # Convert to appropriate types with error handling
         summary['Total_Downtime_Seconds'] = pd.to_numeric(summary['Total_Downtime_Seconds'], errors='coerce').fillna(0).round(0)
         
-        # Current downtime for ongoing devices
+        # Calculate current downtime accurately using Ghana time
         def calculate_current_downtime(row):
             try:
                 if row['Ongoing_Count'] > 0:
-                    offline_time = row['Last_Offline']
+                    offline_time = row['Last_Offline_Time']
                     if isinstance(offline_time, pd.Timestamp):
+                        # Ensure offline_time has no timezone for consistent calculation
                         if offline_time.tz is not None:
                             offline_time = offline_time.tz_localize(None)
                         return (analysis_time.tz_localize(None) - offline_time).total_seconds()
@@ -204,229 +185,356 @@ def process_data(df, start_date=None, end_date=None, selected_devices=None):
                         offline_time = pd.to_datetime(offline_time)
                         return (analysis_time.tz_localize(None) - offline_time).total_seconds()
                 else:
-                    return 0
+                    return np.nan
             except:
-                return 0
+                return np.nan
         
         summary['Current_Downtime_Seconds'] = summary.apply(calculate_current_downtime, axis=1).round(0)
-        summary['Current_Downtime_Duration'] = summary['Current_Downtime_Seconds'].apply(format_duration)
+        
+        # Ensure Total >= Current for ongoing devices
+        ongoing_mask = summary['Ongoing_Count'] > 0
+        summary.loc[ongoing_mask, 'Total_Downtime_Seconds'] = np.maximum(
+            summary.loc[ongoing_mask, 'Total_Downtime_Seconds'],
+            summary.loc[ongoing_mask, 'Current_Downtime_Seconds'].fillna(0)
+        )
+        
+        # Format durations with error handling
+        summary['Current_Downtime_Duration'] = summary['Current_Downtime_Seconds'].apply(lambda x: format_duration(x) if not pd.isna(x) else "")
         summary['Total_Downtime_Duration'] = summary['Total_Downtime_Seconds'].apply(format_duration)
         summary['Current_Status'] = np.where(summary['Ongoing_Count'] > 0, '🔴 Offline', '✔️ Online')
         
-        # Calculate uptime percentage
-        total_period_seconds = (analysis_time - summary['First_Offline'].min()).total_seconds()
-        summary['Uptime_Percentage'] = summary.apply(
-            lambda row: calculate_uptime_percentage(row['Total_Downtime_Seconds'], total_period_seconds),
-            axis=1
-        ).round(2)
+        # Format downtime status with emojis and remove Downtime_Seconds column
+        df_downtime['Downtime_Status'] = np.where(df_downtime['Downtime_Status'] == 'Ongoing', '🔴 Ongoing', '✔️ Completed')
         
-        # Calculate MTBF (Mean Time Between Failures)
-        summary['MTBF_Hours'] = np.where(
-            summary['Total_Events'] > 1,
-            (total_period_seconds - summary['Total_Downtime_Seconds']) / (summary['Total_Events'] - 1) / 3600,
-            0
-        ).round(2)
-        
-        # Format downtime status
-        df_downtime['Downtime_Status'] = np.where(
-            df_downtime['Downtime_Status'] == 'Ongoing', '🔴 Ongoing', '✔️ Completed'
-        )
-        
+        # Select only needed columns for downtime table (remove Downtime_Seconds)
         df_downtime_display = df_downtime[['Device', 'Offline_Time', 'Online_Time', 'Downtime_Duration', 'Downtime_Status']]
         
         return summary, df_downtime_display, analysis_time
-        
+    
     except Exception as e:
         st.error(f"Error in process_data: {str(e)}")
-        return pd.DataFrame(), pd.DataFrame(), get_ghana_time()
+        # Return empty dataframes on error
+        empty_summary = pd.DataFrame(columns=[
+            'Device', 'Current_Status', 'Last_Offline_Time', 
+            'Total_DownTime_Events', 'Current_Downtime_Duration', 
+            'Total_Downtime_Duration'
+        ])
+        empty_downtime = pd.DataFrame(columns=[
+            'Device', 'Offline_Time', 'Online_Time', 
+            'Downtime_Duration', 'Downtime_Status'
+        ])
+        return empty_summary, empty_downtime, get_ghana_time()
 
-# ==================== VISUALIZATION FUNCTIONS ====================
-def create_downtime_trend_chart(downtime_df):
-    """Create downtime trend chart."""
-    if downtime_df.empty:
-        return None
-    
-    # Create daily downtime summary
-    downtime_df['Date'] = pd.to_datetime(downtime_df['Offline_Time']).dt.date
-    daily_summary = downtime_df.groupby('Date').size().reset_index(name='Downtime_Events')
-    
-    fig = px.line(
-        daily_summary,
-        x='Date',
-        y='Downtime_Events',
-        title='📈 Daily Downtime Events Trend',
-        labels={'Date': 'Date', 'Downtime_Events': 'Number of Downtime Events'},
-        markers=True
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=True, gridwidth=1, gridcolor='LightGray'),
-        yaxis=dict(showgrid=True, gridwidth=1, gridcolor='LightGray'),
-        height=300
-    )
-    
-    return fig
-
-def create_device_status_chart(summary_df):
-    """Create device status distribution chart."""
-    if summary_df.empty:
-        return None
-    
-    status_counts = summary_df['Current_Status'].value_counts()
-    
-    fig = px.pie(
-        values=status_counts.values,
-        names=status_counts.index,
-        title='📊 Device Status Distribution',
-        color_discrete_sequence=['#1cc88a', '#e74a3b'],
-        hole=0.3
-    )
-    
-    fig.update_traces(textposition='inside', textinfo='percent+label')
-    fig.update_layout(showlegend=False, height=300)
-    
-    return fig
-
-def create_top_downtime_chart(summary_df):
-    """Create chart for top devices by downtime."""
-    if summary_df.empty or len(summary_df) < 2:
-        return None
-    
-    top_devices = summary_df.nlargest(10, 'Total_Downtime_Seconds')
-    
-    fig = px.bar(
-        top_devices,
-        x='Device',
-        y='Total_Downtime_Seconds',
-        title='🏆 Top 10 Devices by Total Downtime',
-        labels={'Total_Downtime_Seconds': 'Total Downtime (seconds)', 'Device': 'Device'},
-        color='Total_Downtime_Seconds',
-        color_continuous_scale='Reds'
-    )
-    
-    fig.update_layout(
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=300,
-        xaxis_tickangle=-45
-    )
-    
-    return fig
-
-def create_uptime_gauge(uptime_percentage):
-    """Create uptime percentage gauge."""
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=uptime_percentage,
-        title={'text': "📈 Overall Uptime %"},
-        domain={'x': [0, 1], 'y': [0, 1]},
-        gauge={
-            'axis': {'range': [None, 100]},
-            'bar': {'color': "darkblue"},
-            'steps': [
-                {'range': [0, 90], 'color': "lightgray"},
-                {'range': [90, 95], 'color': "gray"},
-                {'range': [95, 100], 'color': "lightgreen"}
-            ],
-            'threshold': {
-                'line': {'color': "red", 'width': 4},
-                'thickness': 0.75,
-                'value': 95
-            }
-        }
-    ))
-    
-    fig.update_layout(height=250)
-    return fig
-
-# ==================== MAIN APPLICATION ====================
-def main():
-    # Custom CSS
+# Add custom CSS for mobile bottom menu
+def add_bottom_menu_css():
     st.markdown("""
     <style>
-    .main-header {
-        font-size: 2.5rem;
-        color: #1E3A8A;
-        text-align: center;
-        margin-bottom: 1rem;
+    /* Mobile bottom menu styling */
+    @media (max-width: 768px) {
+        /* Hide default sidebar on mobile */
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        
+        /* Style for bottom navigation menu */
+        .bottom-menu {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #0e1117;
+            border-top: 1px solid #2b313e;
+            padding: 10px 5px;
+            z-index: 9999;
+            display: flex;
+            justify-content: space-around;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .bottom-menu-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px 12px;
+            color: #d1d5db;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.2s;
+            min-width: 70px;
+            font-size: 12px;
+        }
+        
+        .bottom-menu-item:hover {
+            background-color: #262730;
+            color: white;
+        }
+        
+        .bottom-menu-item.active {
+            background-color: #262730;
+            color: #4ade80;
+        }
+        
+        .bottom-menu-icon {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+        
+        /* Add padding to main content to prevent bottom menu overlap */
+        .main .block-container {
+            padding-bottom: 80px !important;
+        }
+        
+        /* Adjust columns layout for mobile */
+        [data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
+        
+        /* Make tables scroll horizontally on mobile */
+        .stDataFrame {
+            overflow-x: auto;
+        }
+        
+        /* Adjust metric cards for mobile */
+        [data-testid="stMetric"] {
+            min-width: 100px;
+        }
+        
+        /* Adjust buttons for mobile */
+        .stButton button {
+            width: 100%;
+        }
+        
+        /* Adjust date inputs for mobile */
+        .stDateInput {
+            width: 100%;
+        }
+        
+        /* Make select boxes full width on mobile */
+        .stSelectbox {
+            width: 100%;
+        }
+        
+        /* Adjust multiselect for mobile */
+        .stMultiSelect {
+            width: 100%;
+        }
     }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
+    
+    /* Desktop styles */
+    @media (min-width: 769px) {
+        .bottom-menu {
+            display: none;
+        }
+        
+        /* Show sidebar on desktop */
+        [data-testid="stSidebar"] {
+            display: block;
+        }
     }
-    .metric-value {
-        font-size: 2rem;
-        font-weight: bold;
+    
+    /* General improvements for mobile */
+    .stDataFrame table {
+        font-size: 12px;
     }
-    .stButton button {
-        width: 100%;
-        border-radius: 5px;
-        font-weight: bold;
-    }
-    .theme-button {
-        width: 100%;
-        margin: 2px 0;
-        border-radius: 5px;
-    }
-    .theme-button-active {
-        background-color: #4CAF50 !important;
-        color: white !important;
-        border: 2px solid #45a049 !important;
+    
+    /* Improve mobile touch targets */
+    .stButton button, .stDownloadButton button, .stSelectbox div {
+        min-height: 44px;
     }
     </style>
     """, unsafe_allow_html=True)
+
+# Bottom menu component
+def bottom_menu():
+    st.markdown("""
+    <div class="bottom-menu">
+        <a href="#summary" class="bottom-menu-item" onclick="showSection('summary')">
+            <div class="bottom-menu-icon">📊</div>
+            <div>Summary</div>
+        </a>
+        <a href="#downtime" class="bottom-menu-item" onclick="showSection('downtime')">
+            <div class="bottom-menu-icon">🔍</div>
+            <div>Downtime</div>
+        </a>
+        <a href="#downloads" class="bottom-menu-item" onclick="showSection('downloads')">
+            <div class="bottom-menu-icon">📥</div>
+            <div>Downloads</div>
+        </a>
+        <a href="#filters" class="bottom-menu-item" onclick="showSection('filters')">
+            <div class="bottom-menu-icon">⚙️</div>
+            <div>Filters</div>
+        </a>
+        <a href="#help" class="bottom-menu-item" onclick="showSection('help')">
+            <div class="bottom-menu-icon">❓</div>
+            <div>Help</div>
+        </a>
+    </div>
     
-    # Header with time
+    <script>
+    function showSection(sectionId) {
+        // Store the selected section in sessionStorage
+        sessionStorage.setItem('selectedSection', sectionId);
+        
+        // This function would be expanded to actually show/hide sections
+        // For now, we'll just scroll to the section
+        const element = document.getElementById(sectionId);
+        if (element) {
+            element.scrollIntoView({behavior: 'smooth'});
+        }
+        
+        // Update active state
+        document.querySelectorAll('.bottom-menu-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        event.currentTarget.classList.add('active');
+        
+        // Prevent default link behavior
+        return false;
+    }
+    
+    // Initialize active state on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const savedSection = sessionStorage.getItem('selectedSection') || 'summary';
+        const element = document.getElementById(savedSection);
+        if (element) {
+            element.scrollIntoView();
+        }
+        
+        // Set active menu item
+        document.querySelectorAll('.bottom-menu-item').forEach(item => {
+            if (item.getAttribute('href') === '#' + savedSection) {
+                item.classList.add('active');
+            }
+        });
+    });
+    </script>
+    """, unsafe_allow_html=True)
+
+# Mobile sidebar replacement
+def mobile_sidebar():
+    with st.expander("📱 Mobile Menu", expanded=False):
+        st.header("Report Controls")
+        
+        # File upload
+        uploaded_file = st.file_uploader("Upload CSV File", type=['csv'], key="mobile_upload")
+        
+        if uploaded_file:
+            try:
+                df = pd.read_csv(uploaded_file)
+                st.success(f"File loaded: {uploaded_file.name}")
+                st.info(f"Total records: {len(df)}")
+                
+                # Show date range picker
+                if 'Record Time' in df.columns:
+                    df['Record Time'] = pd.to_datetime(df['Record Time'], dayfirst=True, errors='coerce')
+                    min_date = df['Record Time'].min().date()
+                    max_date = df['Record Time'].max().date()
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        start_date = st.date_input("Start Date", min_date, min_value=min_date, max_value=max_date, key="mobile_start")
+                    with col2:
+                        end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date, key="mobile_end")
+            
+            except Exception as e:
+                st.error(f"Error loading file: {str(e)}")
+
+# Streamlit App
+def main():
+    st.set_page_config(
+        page_title="Device Downtime Report",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Add custom CSS for mobile
+    add_bottom_menu_css()
+    
+    # Get Ghana time
     ghana_time = get_ghana_time()
     current_time_str = ghana_time.strftime("%Y-%m-%d %H:%M:%S %Z")
     
-    col1, col2, col3 = st.columns([2, 3, 2])
-    with col1:
-        st.markdown(f'<div style="text-align: left; font-size: 0.9em; color: #666;">⏰ Ghana Time: {current_time_str}</div>', unsafe_allow_html=True)
-    with col2:
-        st.markdown('<h1 class="main-header">📊 Advanced Device Downtime Analyzer</h1>', unsafe_allow_html=True)
-    with col3:
-        if st.button("🔄 Auto-refresh", key="refresh_btn"):
-            st.rerun()
+    # Add timestamp display at the top with small font - shows Ghana time
+    st.markdown(
+        f'<div style="text-align: right; font-size: 0.8em; color: #666; margin-bottom: 10px;">'
+        f'⏰ Analysis time (Ghana/Accra): {current_time_str}'
+        f'</div>',
+        unsafe_allow_html=True
+    )
     
-    # Initialize session state
-    if 'processed' not in st.session_state:
-        st.session_state.processed = False
-    if 'data_loaded' not in st.session_state:
-        st.session_state.data_loaded = False
+    st.title("📊 Device Downtime Report")
+    
+    # Initialize session state for status filters
     if 'summary_status_filter' not in st.session_state:
         st.session_state.summary_status_filter = "All"
     if 'downtime_status_filter' not in st.session_state:
         st.session_state.downtime_status_filter = "All"
     if 'analysis_time' not in st.session_state:
         st.session_state.analysis_time = None
-    if 'theme' not in st.session_state:
-        st.session_state.theme = 'system'
+    if 'mobile_view' not in st.session_state:
+        st.session_state.mobile_view = False
     
-    # ==================== SIDEBAR ====================
+    # Initialize session state
+    if 'processed' not in st.session_state:
+        st.session_state.processed = False
+    if 'data_loaded' not in st.session_state:
+        st.session_state.data_loaded = False
+    if 'last_error' not in st.session_state:
+        st.session_state.last_error = None
+    
+    # Detect mobile view (simple detection based on screen width)
+    # Note: This is a basic detection. For more accurate detection, you'd need JS
+    st.markdown("""
+    <script>
+    // Detect mobile and store in session storage
+    function detectMobile() {
+        const isMobile = window.innerWidth <= 768;
+        sessionStorage.setItem('isMobile', isMobile);
+        return isMobile;
+    }
+    
+    // Check on load and resize
+    window.addEventListener('load', detectMobile);
+    window.addEventListener('resize', detectMobile);
+    
+    // Initial detection
+    detectMobile();
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Check if we should show mobile sidebar
+    show_mobile_sidebar = st.checkbox("📱 Show Mobile Controls", value=False, 
+                                      help="Toggle mobile-optimized controls")
+    
+    if show_mobile_sidebar:
+        mobile_sidebar()
+    
+    # Main sidebar for desktop
     with st.sidebar:
-        st.markdown("### ⚙️ Controls Panel")
+        st.header("Report Controls")
         
         # File upload
-        uploaded_file = st.file_uploader(
-            "📁 Upload CSV File",
-            type=['csv'],
-            help="Upload your device logs CSV file"
-        )
+        uploaded_file = st.file_uploader("Upload CSV File", type=['csv'], 
+                                         on_change=lambda: st.session_state.update({
+                                             "data_loaded": False, 
+                                             "processed": False,
+                                             "last_error": None,
+                                             "summary_status_filter": "All",  # Reset filter on new file
+                                             "downtime_status_filter": "All",  # Reset filter on new file
+                                             "analysis_time": None  # Reset analysis time
+                                         }))
         
+        # Auto-process when file is uploaded (shows all devices by default)
         if uploaded_file is not None and not st.session_state.data_loaded:
             try:
-                with st.spinner("Processing data..."):
+                with st.spinner("Loading and processing data..."):
                     df = pd.read_csv(uploaded_file)
                     
                     # Data preprocessing
                     df['Record Time Format'] = pd.to_datetime(
-                        df['Record Time'],
+                        df['Record Time'], 
                         dayfirst=True,
                         errors='coerce'
                     )
@@ -444,545 +552,307 @@ def main():
                     
                     df = df.sort_values(by=['Device Name', 'Record Time'], ascending=[True, True])
                     
+                    # Store the processed dataframe in session state
                     st.session_state.df = df
                     st.session_state.data_loaded = True
                     
-                    # Auto-process
+                    # Auto-process with default settings (ALL devices by default)
                     min_date = df['Record Time'].min().date()
                     max_date = df['Record Time'].max().date()
+                    all_devices = sorted(df['Device Name'].unique())
                     
+                    # Process with ALL devices selected (empty list means all devices)
                     summary, downtime, analysis_time = process_data(
                         df.copy(),
                         pd.to_datetime(min_date),
                         pd.to_datetime(max_date),
-                        []
+                        []  # Empty list means ALL devices
                     )
                     
+                    # Store in session state
                     st.session_state.summary = summary
                     st.session_state.downtime = downtime
                     st.session_state.analysis_time = analysis_time
                     st.session_state.processed = True
                     
-                    st.success("✅ Data loaded successfully!")
-                    st.info(f"📊 {len(df)} records processed")
+                    st.success(f"File loaded and processed successfully!")
+                    st.info(f"Total records: {len(df)}")
                     
             except Exception as e:
-                st.error(f"❌ Error: {str(e)}")
+                st.error(f"Error loading file: {str(e)}")
+                st.session_state.last_error = str(e)
         
-        # Advanced Filters Section
+        # Show filters and refresh button if data is loaded
         if 'df' in st.session_state and st.session_state.data_loaded:
-            st.markdown("---")
-            st.markdown("### 🔍 Advanced Filters")
-            
             df = st.session_state.df
             
-            # Date Range with Quick Select
+            # Date range selector with validation
+            st.subheader("📅 Date Range Filter")
+            min_date = df['Record Time'].min().date()
+            max_date = df['Record Time'].max().date()
+            
             col1, col2 = st.columns(2)
             with col1:
-                start_date = st.date_input(
-                    "📅 Start Date",
-                    df['Record Time'].min().date(),
-                    help="Select start date for analysis"
-                )
+                start_date = st.date_input("Start Date", min_date, min_value=min_date, max_value=max_date)
             with col2:
-                end_date = st.date_input(
-                    "📅 End Date",
-                    df['Record Time'].max().date(),
-                    help="Select end date for analysis"
-                )
+                end_date = st.date_input("End Date", max_date, min_value=min_date, max_value=max_date)
             
-            # Device Filter with Search
+            # Validate date range
+            if start_date > end_date:
+                st.error("❌ Start date must be before end date!")
+                # Auto-correct by swapping dates
+                start_date, end_date = end_date, start_date
+            
+            # Device filter - NO default selection (empty means all)
+            st.subheader("📱 Device Filter")
             all_devices = sorted(df['Device Name'].unique())
-            device_search = st.text_input("🔎 Search Devices", "", help="Type to filter devices")
             
-            if device_search:
-                filtered_devices = [d for d in all_devices if device_search.lower() in d.lower()]
-            else:
-                filtered_devices = all_devices
-            
+            # Multiselect with NO default devices selected (empty list)
             selected_devices = st.multiselect(
-                "📱 Select Devices",
-                filtered_devices,
-                default=[],
-                help="Select specific devices (empty = all)"
+                "Select devices (empty = all)",
+                all_devices,
+                default=[]  # Empty list = ALL devices by default
             )
             
-            # Duration Filter
-            st.markdown("#### ⏱️ Duration Filter")
-            min_duration, max_duration = st.slider(
-                "Filter by downtime duration (hours)",
-                0, 720, (0, 720),
-                help="Filter events by duration range"
-            )
+            # Add a separator before the refresh button
+            st.write("---")
             
-            # Action Buttons
-            col1, col2 = st.columns(2)
+            # Refresh Report button
+            col1, col2 = st.columns([1, 1])
             with col1:
-                if st.button("🚀 Apply Filters", use_container_width=True):
-                    with st.spinner("Applying filters..."):
-                        summary, downtime, analysis_time = process_data(
-                            st.session_state.df.copy(),
-                            pd.to_datetime(start_date),
-                            pd.to_datetime(end_date),
-                            selected_devices
-                        )
-                        st.session_state.summary = summary
-                        st.session_state.downtime = downtime
-                        st.session_state.analysis_time = analysis_time
-                        st.success("Filters applied!")
-                        
+                if st.button("🔄 Refresh", use_container_width=True):
+                    try:
+                        with st.spinner("Updating report with new filters..."):
+                            # If no devices selected, process ALL devices (empty list)
+                            summary, downtime, analysis_time = process_data(
+                                df.copy(),
+                                pd.to_datetime(start_date),
+                                pd.to_datetime(end_date),
+                                selected_devices  # Empty list = all devices
+                            )
+                            
+                            # Check if we got any data
+                            if summary.empty and downtime.empty:
+                                st.warning("⚠️ No data found for the selected filters. Please adjust your criteria.")
+                            else:
+                                # Update session state
+                                st.session_state.summary = summary
+                                st.session_state.downtime = downtime
+                                st.session_state.analysis_time = analysis_time
+                                st.session_state.processed = True
+                                st.success("✅ Refreshed!")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error updating report: {str(e)}")
+                        st.session_state.last_error = str(e)
+            
             with col2:
-                if st.button("🗑️ Clear All", type="secondary", use_container_width=True):
+                if st.button("🗑️ reset", type="secondary", use_container_width=True):
+                    # Clear all session state
                     for key in list(st.session_state.keys()):
                         del st.session_state[key]
                     st.rerun()
             
-            # Quick Stats
-            st.markdown("---")
-            st.markdown("### 📈 Quick Stats")
-            if st.session_state.processed:
-                summary = st.session_state.summary
-                if not summary.empty:
-                    st.metric("Total Devices", len(summary))
-                    st.metric("Online Devices", len(summary[summary['Current_Status'] == '✔️ Online']))
-                    st.metric("Offline Devices", len(summary[summary['Current_Status'] == '🔴 Offline']))
-        
-        # ==================== THEME SETTINGS ====================
-        st.markdown("---")
-        
-        # Theme Settings Button
-        theme_expander = st.expander("🎨 Theme Settings", expanded=False)
-        
-        with theme_expander:
-            st.markdown("**Select Theme:**")
-            
-            # Create three columns for theme buttons
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Light theme button
-                light_active = st.session_state.theme == 'light'
-                light_btn = st.button(
-                    "☀️ Light",
-                    key="theme_light",
-                    help="Light theme",
-                    use_container_width=True
-                )
-                if light_btn:
-                    st.session_state.theme = 'light'
-                    apply_theme_settings()
-                    st.rerun()
-                
-                # Add visual indicator for active theme
-                if light_active:
-                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
-            
-            with col2:
-                # Dark theme button
-                dark_active = st.session_state.theme == 'dark'
-                dark_btn = st.button(
-                    "🌙 Dark",
-                    key="theme_dark",
-                    help="Dark theme",
-                    use_container_width=True
-                )
-                if dark_btn:
-                    st.session_state.theme = 'dark'
-                    apply_theme_settings()
-                    st.rerun()
-                
-                # Add visual indicator for active theme
-                if dark_active:
-                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
-            
-            with col3:
-                # System theme button
-                system_active = st.session_state.theme == 'system'
-                system_btn = st.button(
-                    "💻 System",
-                    key="theme_system",
-                    help="Use system default theme",
-                    use_container_width=True
-                )
-                if system_btn:
-                    st.session_state.theme = 'system'
-                    apply_theme_settings()
-                    st.rerun()
-                
-                # Add visual indicator for active theme
-                if system_active:
-                    st.markdown('<div style="text-align: center; color: green; font-size: 0.8em;">✓ Active</div>', unsafe_allow_html=True)
-            
-            # Theme description
-            st.markdown("---")
-            st.markdown("**Theme Info:**")
-            if st.session_state.theme == 'light':
-                st.info("☀️ **Light Theme** - Clean and bright interface")
-            elif st.session_state.theme == 'dark':
-                st.info("🌙 **Dark Theme** - Easy on the eyes in low light")
+            # Show current filter info
+            st.caption(f"📅 Date range: {start_date} to {end_date}")
+            if selected_devices:
+                st.caption(f"📱 Showing {len(selected_devices)} of {len(all_devices)} devices")
             else:
-                st.info("💻 **System Theme** - Follows your system settings")
+                st.caption(f"📱 Showing all {len(all_devices)} devices")
+        
+        elif uploaded_file is None:
+            st.warning("📁 Please upload a CSV file to begin")
     
-    # ==================== MAIN CONTENT ====================
+    # Main content area
     if 'processed' in st.session_state and st.session_state.processed:
         summary = st.session_state.summary
         downtime = st.session_state.downtime
         
+        # Check if we have data
         if summary.empty and downtime.empty:
-            st.warning("⚠️ No data found for the selected filters.")
+            st.warning("⚠️ No data found for the selected filters. Please adjust your criteria in the sidebar.")
         else:
-            # ==================== DASHBOARD METRICS ====================
-            st.markdown("## 📊 Dashboard Overview")
+            # Add anchor for Summary section
+            st.markdown('<div id="summary"></div>', unsafe_allow_html=True)
             
-            # Calculate overall metrics
-            total_devices = len(summary) if not summary.empty else 0
-            online_devices = len(summary[summary['Current_Status'] == '✔️ Online']) if not summary.empty else 0
-            offline_devices = len(summary[summary['Current_Status'] == '🔴 Offline']) if not summary.empty else 0
-            total_downtime_seconds = summary['Total_Downtime_Seconds'].sum() if not summary.empty else 0
-            total_downtime_formatted = format_duration(total_downtime_seconds)
+            # Calculate online and offline counts
+            total_online = len(summary[summary['Current_Status'] == '✔️ Online']) if not summary.empty else 0
+            total_offline = len(summary[summary['Current_Status'] == '🔴 Offline']) if not summary.empty else 0
             
-            # Display metrics in columns
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown(f"""
-                <div class="metric-card">
-                <div>Total Devices</div>
-                <div class="metric-value">{total_devices}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
+                st.metric(
+                    label="Total Devices",
+                    value=len(summary) if not summary.empty else 0,
+                    delta=None
+                )
             with col2:
-                st.markdown(f"""
-                <div class="metric-card" style="background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);">
-                <div>✔️ Online</div>
-                <div class="metric-value">{online_devices}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
+                st.metric(
+                    label="Total ✔️ Online",
+                    value=total_online,
+                    delta=None
+                )
             with col3:
-                st.markdown(f"""
-                <div class="metric-card" style="background: linear-gradient(135deg, #e74a3b 0%, #be2617 100%);">
-                <div>🔴 Offline</div>
-                <div class="metric-value">{offline_devices}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.metric(
+                    label="Total 🔴 Offline",
+                    value=total_offline,
+                    delta=None
+                )
             
-            with col4:
-                st.markdown(f"""
-                <div class="metric-card" style="background: linear-gradient(135deg, #f6c23e 0%, #d19c0f 100%);">
-                <div>Total Downtime</div>
-                <div class="metric-value">{total_downtime_formatted}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # ==================== VISUALIZATIONS ====================
-            st.markdown("## 📈 Analytics & Visualizations")
+            # Divider
+            st.divider()
             
             if not summary.empty:
-                col1, col2 = st.columns(2)
+                # Create display summary without Ongoing_Count column
+                display_summary = summary[['Device', 'Current_Status', 'Last_Offline_Time', 
+                                           'Total_DownTime_Events', 'Current_Downtime_Duration', 
+                                           'Total_Downtime_Duration']].copy()
                 
+                # Add dropdown filter for status at top right of summary table
+                col1, col2 = st.columns([3, 1])
                 with col1:
-                    # Uptime Gauge
-                    overall_uptime = calculate_uptime_percentage(
-                        total_downtime_seconds,
-                        total_devices * 24 * 3600  # Approximate total period
-                    )
-                    fig_gauge = create_uptime_gauge(overall_uptime)
-                    st.plotly_chart(fig_gauge, use_container_width=True)
+                    st.subheader(f"📋 Summary Table ({display_summary.shape[0]} rows × {display_summary.shape[1]} cols)")
                 
                 with col2:
-                    # Status Distribution
-                    fig_pie = create_device_status_chart(summary)
-                    if fig_pie:
-                        st.plotly_chart(fig_pie, use_container_width=True)
-                
-                col3, col4 = st.columns(2)
-                
-                with col3:
-                    # Downtime Trend
-                    if not downtime.empty:
-                        fig_trend = create_downtime_trend_chart(downtime)
-                        if fig_trend:
-                            st.plotly_chart(fig_trend, use_container_width=True)
-                
-                with col4:
-                    # Top Downtime Devices
-                    fig_top = create_top_downtime_chart(summary)
-                    if fig_top:
-                        st.plotly_chart(fig_top, use_container_width=True)
-            
-            # ==================== ENHANCED SUMMARY TABLE ====================
-            st.markdown("## 📋 Enhanced Device Summary")
-            
-            if not summary.empty:
-                # Filter dropdown
-                col1, col2, col3 = st.columns([3, 2, 1])
-                with col1:
+                    # Status filter dropdown for summary table
                     summary_status_options = ["All", "✔️ Online", "🔴 Offline"]
                     selected_summary_status = st.selectbox(
                         "Filter by Status",
                         options=summary_status_options,
-                        index=summary_status_options.index(st.session_state.summary_status_filter),
-                        key="summary_status_filter_select"
+                        index=summary_status_options.index(st.session_state.summary_status_filter) if st.session_state.summary_status_filter in summary_status_options else 0,
+                        key="summary_status_filter_select",
+                        label_visibility="collapsed"
                     )
+                    
+                    # Update session state
                     st.session_state.summary_status_filter = selected_summary_status
                 
-                with col2:
-                    # Sort options
-                    sort_by = st.selectbox(
-                        "Sort by",
-                        ["Device", "Status", "Total Downtime", "Uptime %", "MTBF"],
-                        key="summary_sort"
-                    )
-                
-                with col3:
-                    # Items per page
-                    items_per_page = st.selectbox("Rows", [10, 25, 50, 100], key="summary_rows")
-                
-                # Apply filters
+                # Apply status filter if not "All"
                 if st.session_state.summary_status_filter != "All":
-                    display_summary = summary[summary['Current_Status'] == st.session_state.summary_status_filter].copy()
+                    filtered_summary = display_summary[display_summary['Current_Status'] == st.session_state.summary_status_filter].copy()
+                    st.caption(f"📊 Showing {len(filtered_summary)} devices with status: {st.session_state.summary_status_filter}")
+                    st.dataframe(filtered_summary, use_container_width=True)
                 else:
-                    display_summary = summary.copy()
+                    st.dataframe(display_summary, use_container_width=True)
                 
-                # Apply sorting
-                sort_columns = {
-                    "Device": "Device",
-                    "Status": "Current_Status",
-                    "Total Downtime": "Total_Downtime_Seconds",
-                    "Uptime %": "Uptime_Percentage",
-                    "MTBF": "MTBF_Hours"
-                }
-                display_summary = display_summary.sort_values(
-                    by=sort_columns[sort_by],
-                    ascending=(sort_by not in ["Total Downtime", "MTBF"])
+                # Add anchor for Downloads section
+                st.markdown('<div id="downloads"></div>', unsafe_allow_html=True)
+                
+                # Download button for summary - BELOW THE TABLE
+                # Prepare data for download (filtered or full)
+                if st.session_state.summary_status_filter != "All":
+                    download_summary = display_summary[display_summary['Current_Status'] == st.session_state.summary_status_filter]
+                else:
+                    download_summary = display_summary
+                
+                # Create Excel file in memory
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    download_summary.to_excel(writer, sheet_name='Summary', index=False)
+                excel_data = excel_buffer.getvalue()
+                
+                st.download_button(
+                    label="📥 Download Summary Excel",
+                    data=excel_data,
+                    file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
                 )
-                
-                # Pagination
-                total_pages = max(1, len(display_summary) // items_per_page + (1 if len(display_summary) % items_per_page else 0))
-                page_number = st.number_input("Page", min_value=1, max_value=total_pages, value=1, key="summary_page")
-                start_idx = (page_number - 1) * items_per_page
-                end_idx = min(page_number * items_per_page, len(display_summary))
-                
-                # Display table
-                st.dataframe(
-                    display_summary.iloc[start_idx:end_idx][[
-                        'Device', 'Current_Status', 'Total_Events',
-                        'Current_Downtime_Duration', 'Total_Downtime_Duration',
-                        'Uptime_Percentage', 'MTBF_Hours', 'First_Offline', 'Last_Offline'
-                    ]],
-                    use_container_width=True,
-                    column_config={
-                        "Device": "Device",
-                        "Current_Status": "Status",
-                        "Total_Events": "Events",
-                        "Current_Downtime_Duration": "Current Downtime",
-                        "Total_Downtime_Duration": "Total Downtime",
-                        "Uptime_Percentage": st.column_config.NumberColumn("Uptime %", format="%.2f%%"),
-                        "MTBF_Hours": st.column_config.NumberColumn("MTBF (hrs)", format="%.1f"),
-                        "First_Offline": "First Offline",
-                        "Last_Offline": "Last Offline"
-                    }
-                )
-                
-                # Export buttons
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    csv = display_summary.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Summary CSV",
-                        data=csv,
-                        file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime='text/csv',
-                        use_container_width=True
-                    )
-                with col2:
-                    buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        display_summary.to_excel(writer, index=False, sheet_name='Summary')
-                    st.download_button(
-                        label="📥 Download Summary Excel",
-                        data=buffer.getvalue(),
-                        file_name=f"summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        use_container_width=True
-                    )
-                with col3:
-                    if st.button("📊 Generate Report", use_container_width=True):
-                        st.info("Report generation feature coming soon!")
-            
-            # ==================== ENHANCED DOWNTIME EVENTS ====================
-            st.markdown("## 🔍 Detailed Downtime Events")
+            else:
+                st.info("ℹ️ No summary data available for the selected filters.")
             
             if not downtime.empty:
-                # Enhanced filtering for downtime
-                col1, col2, col3 = st.columns([2, 2, 1])
+                # Add anchor for Downtime section
+                st.markdown('<div id="downtime"></div>', unsafe_allow_html=True)
+                
+                # Add some spacing between tables
+                st.write("")
+                
+                # Add dropdown filter for status at top right of downtime table
+                col1, col2 = st.columns([3, 1])
                 with col1:
-                    downtime_status_options = ["All", "✔️ Completed", "🔴 Ongoing"]
-                    selected_downtime_status = st.selectbox(
-                        "Filter Events by Status",
-                        options=downtime_status_options,
-                        index=downtime_status_options.index(st.session_state.downtime_status_filter),
-                        key="downtime_status_filter_select"
-                    )
-                    st.session_state.downtime_status_filter = selected_downtime_status
+                    st.subheader(f"🔍 Downtime Events ({downtime.shape[0]} rows × {downtime.shape[1]} cols)")
                 
                 with col2:
-                    # Device filter for events
-                    event_devices = sorted(downtime['Device'].unique())
-                    selected_event_device = st.multiselect(
-                        "Filter by Device",
-                        event_devices,
-                        default=[],
-                        key="event_device_filter"
+                    # Status filter dropdown for downtime table
+                    downtime_status_options = ["All", "✔️ Completed", "🔴 Ongoing"]
+                    selected_downtime_status = st.selectbox(
+                        "Filter by Status",
+                        options=downtime_status_options,
+                        index=downtime_status_options.index(st.session_state.downtime_status_filter) if st.session_state.downtime_status_filter in downtime_status_options else 0,
+                        key="downtime_status_filter_select",
+                        label_visibility="collapsed"
                     )
+                    
+                    # Update session state
+                    st.session_state.downtime_status_filter = selected_downtime_status
                 
-                with col3:
-                    event_items_per_page = st.selectbox("Rows", [10, 25, 50, 100], key="downtime_rows")
-                
-                # Apply filters
+                # Apply status filter if not "All"
                 if st.session_state.downtime_status_filter != "All":
                     if st.session_state.downtime_status_filter == "✔️ Completed":
                         filtered_downtime = downtime[downtime['Downtime_Status'] == '✔️ Completed'].copy()
-                    else:
+                    else:  # "🔴 Ongoing"
                         filtered_downtime = downtime[downtime['Downtime_Status'] == '🔴 Ongoing'].copy()
-                else:
-                    filtered_downtime = downtime.copy()
-                
-                if selected_event_device:
-                    filtered_downtime = filtered_downtime[filtered_downtime['Device'].isin(selected_event_device)]
-                
-                # Display table
-                st.dataframe(
-                    filtered_downtime,
-                    use_container_width=True,
-                    column_config={
-                        "Device": "Device",
-                        "Offline_Time": "Offline Time",
-                        "Online_Time": "Online Time",
-                        "Downtime_Duration": "Duration",
-                        "Downtime_Status": "Status"
-                    }
-                )
-                
-                # Export buttons for events
-                col1, col2 = st.columns(2)
-                with col1:
-                    csv_downtime = filtered_downtime.to_csv(index=False)
-                    st.download_button(
-                        label="📥 Download Events CSV",
-                        data=csv_downtime,
-                        file_name=f"downtime_events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime='text/csv',
-                        use_container_width=True
-                    )
-                with col2:
-                    buffer = BytesIO()
-                    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                        filtered_downtime.to_excel(writer, index=False, sheet_name='Downtime Events')
-                    st.download_button(
-                        label="📥 Download Events Excel",
-                        data=buffer.getvalue(),
-                        file_name=f"downtime_events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        use_container_width=True
-                    )
-            
-            # ==================== ADVANCED ANALYTICS ====================
-            st.markdown("## 🧠 Advanced Analytics")
-            
-            if not summary.empty:
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric(
-                        "📈 Overall Uptime %",
-                        f"{overall_uptime:.2f}%",
-                        delta=f"{(overall_uptime - 95):+.2f}%" if overall_uptime else None,
-                        delta_color="normal" if overall_uptime >= 95 else "inverse"
-                    )
-                
-                with col2:
-                    avg_mtbf = summary['MTBF_Hours'].mean()
-                    st.metric(
-                        "⏱️ Average MTBF",
-                        f"{avg_mtbf:.1f} hours",
-                        help="Mean Time Between Failures"
-                    )
-                
-                with col3:
-                    if not downtime.empty:
-                        avg_duration = downtime['Downtime_Duration'].apply(
-                            lambda x: sum(int(t) * 60**i for i, t in enumerate(reversed(x.split(':')))) if ':' in x else 0
-                        ).mean() / 60  # Convert to minutes
-                        st.metric(
-                            "🕒 Avg. Downtime Duration",
-                            f"{avg_duration:.1f} minutes"
-                        )
-                
-                # Performance Insights
-                st.markdown("### 💡 Performance Insights")
-                
-                if offline_devices > 0:
-                    st.warning(f"⚠️ **{offline_devices} device(s) currently offline** - Consider immediate attention.")
-                
-                if not summary.empty:
-                    worst_device = summary.loc[summary['Total_Downtime_Seconds'].idxmax()]
-                    best_device = summary.loc[summary['Uptime_Percentage'].idxmax()]
                     
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.info(f"🚨 **Most problematic device:** {worst_device['Device']} ({format_duration(worst_device['Total_Downtime_Seconds'])})")
-                    with col2:
-                        st.success(f"🏆 **Best performing device:** {best_device['Device']} ({best_device['Uptime_Percentage']:.2f}% uptime)")
+                    st.caption(f"📊 Showing {len(filtered_downtime)} events with status: {st.session_state.downtime_status_filter}")
+                    st.dataframe(filtered_downtime, use_container_width=True)
+                else:
+                    st.dataframe(downtime, use_container_width=True)
+                
+                # Download button for downtime - BELOW THE TABLE
+                # Prepare data for download (filtered or full)
+                if st.session_state.downtime_status_filter != "All":
+                    if st.session_state.downtime_status_filter == "✔️ Completed":
+                        download_downtime = downtime[downtime['Downtime_Status'] == '✔️ Completed']
+                    else:  # "🔴 Ongoing"
+                        download_downtime = downtime[downtime['Downtime_Status'] == '🔴 Ongoing']
+                else:
+                    download_downtime = downtime
+                
+                # Create Excel file in memory for downtime data
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    download_downtime.to_excel(writer, sheet_name='Downtime Events', index=False)
+                excel_data = excel_buffer.getvalue()
+                
+                st.download_button(
+                    label="📥 Download Downtime Excel",
+                    data=excel_data,
+                    file_name=f"downtime_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    use_container_width=True
+                )
+            else:
+                st.info("ℹ️ No downtime events found for the selected filters.")
     
     else:
-        # Initial state
-        st.markdown("## 👋 Welcome to Advanced Device Downtime Analyzer")
+        # Add anchor for Help section
+        st.markdown('<div id="help"></div>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
+        # Initial state or no file uploaded
+        st.info("👈 Please upload a CSV file using the sidebar controls to generate reports.")
         
-        with col1:
-            st.info("""
-            ### 📋 How to use:
-            1. **Upload** your CSV file using the sidebar
-            2. **Apply filters** to refine your analysis
-            3. **Explore** interactive charts and tables
-            4. **Download** reports in CSV or Excel format
-            5. **Monitor** real-time device status
-            
-            ### 🚀 Key Features:
-            - 📊 Interactive visualizations
-            - 🔍 Advanced filtering options
-            - 📈 Real-time analytics
-            - 📥 Multiple export formats
-            - 🎯 Performance insights
+        # Add anchor for Filters section
+        st.markdown('<div id="filters"></div>', unsafe_allow_html=True)
+        
+        # Display sample of expected format
+        with st.expander("📋 Expected CSV Format"):
+            st.code("""
+Required columns:
+- Record Time: Timestamp (DD-MM-YYYY HH:MM:SS)
+- Device Name: Device identifier
+- Type: Should contain 'encoding' and either 'online' or 'offline'
+
+Example:
+Record Time,Device Name,Type
+01-11-2023 10:00:00,Device1,encoding online
+01-11-2023 10:05:00,Device1,encoding offline
+01-11-2023 10:10:00,Device1,encoding online
             """)
-        
-        with col2:
-            st.markdown("""
-            ### 📁 Expected CSV Format:
-            ```csv
-            Record Time,Device Name,Type
-            DD-MM-YYYY HH:MM:SS,Device1,encoding online
-            DD-MM-YYYY HH:MM:SS,Device1,encoding offline
-            DD-MM-YYYY HH:MM:SS,Device2,encoding online
-            ```
-            
-            ### ⚠️ Requirements:
-            - CSV file with proper headers
-            - Timestamps in DD-MM-YYYY HH:MM:SS format
-            - 'encoding online' or 'encoding offline' in Type column
-            """)
-            
-            with st.expander("📋 Sample Data"):
-                sample_data = pd.DataFrame({
-                    'Record Time': ['01-11-2023 10:00:00', '01-11-2023 10:05:00', '01-11-2023 10:10:00'],
-                    'Device Name': ['Device1', 'Device1', 'Device2'],
-                    'Type': ['encoding online', 'encoding offline', 'encoding online']
-                })
-                st.dataframe(sample_data)
+    
+    # Add bottom menu for mobile
+    bottom_menu()
 
 if __name__ == "__main__":
     main()
