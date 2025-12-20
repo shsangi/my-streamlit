@@ -4,6 +4,8 @@ import streamlit as st
 from datetime import datetime, timedelta
 import pytz
 import io
+st.set_page_config(page_icon="📊")  
+
 
 # Format duration function
 def format_duration(seconds):
