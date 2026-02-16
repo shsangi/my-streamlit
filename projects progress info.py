@@ -93,8 +93,11 @@ st.markdown("""
     }
     
     .header-subtitle {
-        margin: 0;
+        margin: 0.5rem 0 0 0;
         opacity: 0.9;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
     }
     
     /* Status bar inside header */
@@ -302,41 +305,40 @@ if st.session_state.data_sheets and not st.session_state.show_original:
         <div class="header-left">
             <div>
                 <h1 class="header-title">📊 Project Pulse</h1>
-                <p class="header-subtitle"><span class="live-badge">LIVE</span> <span class="timestamp">
-                    <span>🔄 {timestamp_str}</span>
-                    <span class="pk-badge">PKT</span>
-                </span> </p>
+                <p class="header-subtitle">
+                    <span class="live-badge">LIVE</span>
+                    <span class="timestamp">
+                        <span>🔄 {timestamp_str}</span>
+                        <span class="pk-badge">PKT</span>
+                    </span>
+                </p>
             </div>
         </div>
-
-                
-                
-            <div class="header-scorecards">
-                <div class="header-scorecard">
-                    <div class="header-scorecard-value">{total_projects}</div>
-                    <div class="header-scorecard-label">Projects</div>
-                    <div class="header-scorecard-sub">{active_projects} Active</div>
-                </div>
-                <div class="header-scorecard">
-                    <div class="header-scorecard-value">{total_hours:.0f}</div>
-                    <div class="header-scorecard-label">Hours</div>
-                    <div class="header-scorecard-sub">Work Log</div>
-                </div>
-                <div class="header-scorecard">
-                    <div class="header-scorecard-value">${total_salary:,.0f}</div>
-                    <div class="header-scorecard-label">Salary</div>
-                    <div class="header-scorecard-sub">Monthly</div>
-                </div>
-                <div class="header-scorecard">
-                    <div class="header-scorecard-value">{total_tasks}</div>
-                    <div class="header-scorecard-label">Tasks</div>
-                    <div class="header-scorecard-sub">{pending_tasks} Pending</div>
-                </div>
-                <div class="header-scorecard">
-                    <div class="header-scorecard-value">{total_resources}</div>
-                    <div class="header-scorecard-label">Resources</div>
-                    <div class="header-scorecard-sub">Links</div>
-                </div>
+        <div class="header-scorecards">
+            <div class="header-scorecard">
+                <div class="header-scorecard-value">{total_projects}</div>
+                <div class="header-scorecard-label">Projects</div>
+                <div class="header-scorecard-sub">{active_projects} Active</div>
+            </div>
+            <div class="header-scorecard">
+                <div class="header-scorecard-value">{total_hours:.0f}</div>
+                <div class="header-scorecard-label">Hours</div>
+                <div class="header-scorecard-sub">Work Log</div>
+            </div>
+            <div class="header-scorecard">
+                <div class="header-scorecard-value">${total_salary:,.0f}</div>
+                <div class="header-scorecard-label">Salary</div>
+                <div class="header-scorecard-sub">Monthly</div>
+            </div>
+            <div class="header-scorecard">
+                <div class="header-scorecard-value">{total_tasks}</div>
+                <div class="header-scorecard-label">Tasks</div>
+                <div class="header-scorecard-sub">{pending_tasks} Pending</div>
+            </div>
+            <div class="header-scorecard">
+                <div class="header-scorecard-value">{total_resources}</div>
+                <div class="header-scorecard-label">Resources</div>
+                <div class="header-scorecard-sub">Links</div>
             </div>
         </div>
     </div>
@@ -536,6 +538,3 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
-
-
-
