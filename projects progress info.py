@@ -308,8 +308,7 @@ if st.session_state.data_sheets and not st.session_state.show_original:
                 </span> </p>
             </div>
         </div>
-        <div class="header-right">
-            <div class="header-status">
+
                 
                 
             <div class="header-scorecards">
@@ -537,5 +536,6 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
 
 
