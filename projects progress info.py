@@ -242,10 +242,7 @@ if st.session_state.last_update:
                 <span class="pk-badge">🇵🇰 PKT</span>
             </span>
         </div>
-        <div style="display: flex; align-items: center; gap: 0.5rem; color: #666;">
-            <span>⏱️ {REFRESH_INTERVAL}s auto-refresh</span>
-            <span style="color: #22c55e;">●</span>
-        </div>
+
     </div>
     """, unsafe_allow_html=True)
 
@@ -507,5 +504,6 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
 
 
