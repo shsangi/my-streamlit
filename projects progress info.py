@@ -64,6 +64,9 @@ st.markdown("""
     .tab-container { background: white; border-radius: 15px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
     .stButton > button { width: 100%; text-align: left; border-radius: 10px; margin: 0.2rem 0; }
     .reset-btn { background: #ff4444; color: white; }
+    .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .table-name { font-weight: 600; color: #2d3748; font-size: 1rem; }
+    .table-shape { background: #e2e8f0; padding: 0.2rem 0.8rem; border-radius: 15px; font-size: 0.8rem; color: #4a5568; }
     #MainMenu, footer, .stDeployButton { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -156,7 +159,7 @@ else:
         if st.session_state.data_sheets and not st.session_state.data_sheets[current].empty:
             df = st.session_state.data_sheets[current].copy()
             
-            # Filters and Secondary Scorecards
+            # Filters and Reset Button
             with st.expander("🔍 Filters", expanded=True):
                 cols = st.columns([3, 1])
                 with cols[0]:
@@ -164,37 +167,37 @@ else:
                         filter_cols = st.columns(3)
                         with filter_cols[0]:
                             companies = ['All'] + list(df['Company name'].unique()) if 'Company name' in df.columns else ['All']
-                            st.session_state.filters['company'] = st.selectbox('Company', companies, key='f_comp')
+                            st.session_state.filters['company'] = st.selectbox('Company', companies, index=0, key='f_comp')
                         with filter_cols[1]:
                             statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                            st.session_state.filters['status'] = st.selectbox('Status', statuses, key='f_stat')
+                            st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
                         with filter_cols[2]:
                             quarters = ['All'] + list(df['Quarter'].unique()) if 'Quarter' in df.columns else ['All']
-                            st.session_state.filters['quarter'] = st.selectbox('Quarter', quarters, key='f_quart')
+                            st.session_state.filters['quarter'] = st.selectbox('Quarter', quarters, index=0, key='f_quart')
                     
                     elif current == 'TASK_PLAN':
                         filter_cols = st.columns(3)
                         with filter_cols[0]:
                             priorities = ['All'] + list(df['Priority'].unique()) if 'Priority' in df.columns else ['All']
-                            st.session_state.filters['priority'] = st.selectbox('Priority', priorities, key='f_pri')
+                            st.session_state.filters['priority'] = st.selectbox('Priority', priorities, index=0, key='f_pri')
                         with filter_cols[1]:
                             statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                            st.session_state.filters['status'] = st.selectbox('Status', statuses, key='f_stat')
+                            st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
                         with filter_cols[2]:
                             owners = ['All'] + list(df['Owner (Team / Client)'].unique()) if 'Owner (Team / Client)' in df.columns else ['All']
-                            st.session_state.filters['owner'] = st.selectbox('Owner', owners, key='f_own')
+                            st.session_state.filters['owner'] = st.selectbox('Owner', owners, index=0, key='f_own')
                     
                     elif current == 'DAILY_WORK_LOG':
                         employees = ['All'] + list(df['Employee Name'].unique()) if 'Employee Name' in df.columns else ['All']
-                        st.session_state.filters['employee'] = st.selectbox('Employee', employees, key='f_emp')
+                        st.session_state.filters['employee'] = st.selectbox('Employee', employees, index=0, key='f_emp')
                     
                     elif current == 'EMPLOYEE_COST':
                         roles = ['All'] + list(df['Role'].unique()) if 'Role' in df.columns else ['All']
-                        st.session_state.filters['role'] = st.selectbox('Role', roles, key='f_role')
+                        st.session_state.filters['role'] = st.selectbox('Role', roles, index=0, key='f_role')
                 
                 with cols[1]:
                     st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🔄 Reset Filters", use_container_width=True):
+                    if st.button("🔄 Reset All Filters", use_container_width=True, type="primary"):
                         st.session_state.filters = {}
                         st.rerun()
             
@@ -275,8 +278,14 @@ else:
                     fig.update_layout(height=300)
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Data table
+                # Data table with name and shape
                 with st.expander("📋 Details", expanded=True):
+                    st.markdown(f"""
+                    <div class="table-header">
+                        <span class="table-name">📄 {current.replace('_', ' ').title()}</span>
+                        <span class="table-shape">{filtered.shape[0]} rows × {filtered.shape[1]} columns</span>
+                    </div>
+                    """, unsafe_allow_html=True)
                     st.dataframe(filtered, use_container_width=True, hide_index=True)
         else:
             st.info("📭 No data available")
