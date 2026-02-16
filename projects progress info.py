@@ -239,7 +239,7 @@ if st.session_state.last_update:
             <span class="live-badge">LIVE</span>
             <span class="timestamp">
                 <span>🔄 {timestamp_str}</span>
-                <span class="pk-badge">🇵🇰 PKT</span>
+                <span class="pk-badge">PKT</span>
             </span>
         </div>
 
@@ -504,6 +504,7 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
 
 
 
