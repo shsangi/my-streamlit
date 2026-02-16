@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import pytz
-from streamlit_autorefresh import st_autorefresh
+import time
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -21,9 +21,10 @@ DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrc
 # --- Initialize Session State ---
 if 'selected_tab' not in st.session_state:
     st.session_state.selected_tab = 'PROJECT_MASTER'
-
-# --- Auto-refresh ---
-count = st_autorefresh(interval=REFRESH_INTERVAL * 1000, key="auto_refresh")
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = None
+if 'data_sheets' not in st.session_state:
+    st.session_state.data_sheets = None
 
 # --- Data Loading Function ---
 @st.cache_data(ttl=REFRESH_INTERVAL)
@@ -52,6 +53,9 @@ def load_data():
 
 # --- Load Data ---
 data_sheets, last_update = load_data()
+if last_update:
+    st.session_state.last_update = last_update
+    st.session_state.data_sheets = data_sheets
 
 # --- Custom CSS for Modern Look ---
 st.markdown("""
@@ -61,7 +65,7 @@ st.markdown("""
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem 2rem;
         border-radius: 20px;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
         color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.1);
     }
@@ -74,7 +78,7 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         border: 1px solid #f0f0f0;
     }
@@ -117,28 +121,26 @@ st.markdown("""
     .tab-container {
         background: white;
         border-radius: 15px;
-        padding: 0.5rem;
+        padding: 1rem;
         box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        margin-bottom: 2rem;
     }
     
     .tab-button {
-        padding: 0.75rem 1.5rem;
+        width: 100%;
+        padding: 0.75rem 1rem;
+        margin: 0.25rem 0;
         border-radius: 10px;
         border: none;
         background: transparent;
+        text-align: left;
         font-weight: 500;
         color: #666;
         transition: all 0.2s;
         cursor: pointer;
-        width: 100%;
-        text-align: left;
-        margin: 2px 0;
     }
     
     .tab-button:hover {
         background: #f8f9fa;
-        color: #667eea;
     }
     
     .tab-button.active {
@@ -165,6 +167,13 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .stDeployButton {display: none;}
+    
+    /* Custom expander */
+    .streamlit-expanderHeader {
+        background: white;
+        border-radius: 10px;
+        border: 1px solid #f0f0f0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -182,29 +191,29 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Status Bar (Single, Clean) ---
-if last_update:
-    timestamp_str = last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p")
+if st.session_state.last_update:
+    timestamp_str = st.session_state.last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p")
     st.markdown(f"""
     <div class="status-bar">
         <div style="display: flex; align-items: center; gap: 1rem;">
             <span class="live-badge">LIVE</span>
             <span class="timestamp">
-                <span>🔄 Last updated: {timestamp_str}</span>
+                <span>🔄 {timestamp_str}</span>
                 <span class="pk-badge">🇵🇰 PKT</span>
             </span>
         </div>
         <div style="display: flex; align-items: center; gap: 0.5rem; color: #666;">
-            <span>⏱️ Auto-refresh: {REFRESH_INTERVAL}s</span>
+            <span>⏱️ {REFRESH_INTERVAL}s auto-refresh</span>
             <span style="color: #22c55e;">●</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
 # --- Main Layout ---
-col1, col2 = st.columns([1, 4])
+left_col, right_col = st.columns([1, 4])
 
 # --- Left Column: Navigation ---
-with col1:
+with left_col:
     st.markdown('<div class="tab-container">', unsafe_allow_html=True)
     st.markdown("##### 📋 Navigation")
     
@@ -217,117 +226,168 @@ with col1:
     }
     
     for tab_key, (icon, label) in tabs.items():
-        active_class = "active" if st.session_state.selected_tab == tab_key else ""
-        if st.button(f"{icon} {label}", key=f"nav_{tab_key}", use_container_width=True):
+        if st.button(
+            f"{icon} {label}", 
+            key=f"nav_{tab_key}", 
+            use_container_width=True,
+            type="secondary" if st.session_state.selected_tab != tab_key else "primary"
+        ):
             st.session_state.selected_tab = tab_key
-        st.markdown(f'<style>div[data-testid="stButton"]:has(button[key="nav_{tab_key}"]) button {{background: {"linear-gradient(135deg, #667eea 0%, #764ba2 100%)" if st.session_state.selected_tab == tab_key else "transparent"}; color: {"white" if st.session_state.selected_tab == tab_key else "#666"};}}</style>', unsafe_allow_html=True)
+            st.rerun()
     
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Right Column: Content ---
-with col2:
+with right_col:
     current_tab = st.session_state.selected_tab
     st.markdown(f"### {tabs[current_tab][1]} Dashboard")
     
-    df = data_sheets[current_tab]
-    
-    if df.empty:
-        st.warning("No data available")
-    else:
-        # Tab-specific content
-        if current_tab == 'PROJECT_MASTER':
-            # Filters in expander
-            with st.expander("🔍 Filters", expanded=False):
+    if st.session_state.data_sheets:
+        df = st.session_state.data_sheets[current_tab]
+        
+        if df.empty:
+            st.info("📭 No data available")
+        else:
+            # Project Master Tab
+            if current_tab == 'PROJECT_MASTER':
+                with st.expander("🔍 Filters", expanded=False):
+                    cols = st.columns(3)
+                    with cols[0]:
+                        companies = ['All'] + list(df['Company name'].unique()) if 'Company name' in df.columns else ['All']
+                        company = st.selectbox('Company', companies, key='filter_company')
+                    with cols[1]:
+                        statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
+                        status = st.selectbox('Status', statuses, key='filter_status')
+                    with cols[2]:
+                        quarters = ['All'] + list(df['Quarter'].unique()) if 'Quarter' in df.columns else ['All']
+                        quarter = st.selectbox('Quarter', quarters, key='filter_quarter')
+                
+                # Apply filters
+                filtered = df.copy()
+                if company != 'All': filtered = filtered[filtered['Company name'] == company]
+                if status != 'All': filtered = filtered[filtered['Status'] == status]
+                if quarter != 'All': filtered = filtered[filtered['Quarter'] == quarter]
+                
+                # Metrics
+                cols = st.columns(4)
+                with cols[0]:
+                    st.metric("Total Projects", len(filtered))
+                with cols[1]:
+                    if 'Budget' in filtered.columns:
+                        st.metric("Total Budget", f"${filtered['Budget'].sum():,.0f}")
+                with cols[2]:
+                    if 'Account Manager' in filtered.columns:
+                        st.metric("Managers", filtered['Account Manager'].nunique())
+                with cols[3]:
+                    if 'Status' in filtered.columns:
+                        st.metric("Active", len(filtered[filtered['Status'] == 'Active']))
+                
+                # Chart
+                if 'Company name' in filtered.columns and 'Budget' in filtered.columns:
+                    chart_data = filtered.groupby('Company name')['Budget'].sum().reset_index()
+                    fig = px.bar(chart_data, x='Company name', y='Budget', 
+                               title="Budget by Company",
+                               color_discrete_sequence=['#667eea'])
+                    fig.update_layout(plot_bgcolor='white', height=350, margin=dict(t=30))
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Data table
+                with st.expander("📋 Details", expanded=True):
+                    st.dataframe(filtered, use_container_width=True, hide_index=True)
+            
+            # Tasks Tab
+            elif current_tab == 'TASK_PLAN':
+                with st.expander("🔍 Filters", expanded=False):
+                    cols = st.columns(2)
+                    with cols[0]:
+                        priorities = ['All'] + list(df['Priority'].unique()) if 'Priority' in df.columns else ['All']
+                        priority = st.selectbox('Priority', priorities, key='task_priority')
+                    with cols[1]:
+                        statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
+                        status = st.selectbox('Status', statuses, key='task_status')
+                
+                filtered = df.copy()
+                if priority != 'All': filtered = filtered[filtered['Priority'] == priority]
+                if status != 'All': filtered = filtered[filtered['Status'] == status]
+                
                 cols = st.columns(3)
                 with cols[0]:
-                    companies = ['All'] + list(df['Company name'].unique()) if 'Company name' in df.columns else ['All']
-                    company = st.selectbox('Company', companies, key='filter_company')
+                    st.metric("Total Tasks", len(filtered))
                 with cols[1]:
-                    statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                    status = st.selectbox('Status', statuses, key='filter_status')
+                    if 'Status' in filtered.columns:
+                        st.metric("Pending", len(filtered[filtered['Status'] != 'Done']))
                 with cols[2]:
-                    quarters = ['All'] + list(df['Quarter'].unique()) if 'Quarter' in df.columns else ['All']
-                    quarter = st.selectbox('Quarter', quarters, key='filter_quarter')
+                    if 'Priority' in filtered.columns:
+                        st.metric("High Priority", len(filtered[filtered['Priority'] == 'High']))
+                
+                if 'Owner (Team / Client)' in filtered.columns:
+                    chart_data = filtered['Owner (Team / Client)'].value_counts().reset_index()
+                    chart_data.columns = ['Owner', 'Count']
+                    fig = px.pie(chart_data, values='Count', names='Owner',
+                               title="Tasks by Owner",
+                               color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig.update_layout(height=350, margin=dict(t=30))
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with st.expander("📋 Details", expanded=True):
+                    st.dataframe(filtered, use_container_width=True, hide_index=True)
             
-            # Filter data
-            filtered = df.copy()
-            if company != 'All': filtered = filtered[filtered['Company name'] == company]
-            if status != 'All': filtered = filtered[filtered['Status'] == status]
-            if quarter != 'All': filtered = filtered[filtered['Quarter'] == quarter]
-            
-            # Metrics row
-            m1, m2, m3, m4 = st.columns(4)
-            with m1:
-                st.metric("Total Projects", len(filtered))
-            with m2:
-                if 'Budget' in filtered.columns:
-                    st.metric("Total Budget", f"${filtered['Budget'].sum():,.0f}")
-            with m3:
-                if 'Account Manager' in filtered.columns:
-                    st.metric("Account Managers", filtered['Account Manager'].nunique())
-            with m4:
-                if 'Status' in filtered.columns:
-                    st.metric("Active", len(filtered[filtered['Status'] == 'Active']))
-            
-            # Charts
-            if 'Company name' in filtered.columns and 'Budget' in filtered.columns:
-                fig = px.bar(
-                    filtered.groupby('Company name')['Budget'].sum().reset_index(),
-                    x='Company name', y='Budget',
-                    title="Budget by Company",
-                    color_discrete_sequence=['#667eea']
-                )
-                fig.update_layout(plot_bgcolor='white', height=400)
-                st.plotly_chart(fig, use_container_width=True)
-            
-            # Data table
-            with st.expander("📋 View Details", expanded=True):
-                st.dataframe(filtered, use_container_width=True, hide_index=True)
-        
-        elif current_tab == 'TASK_PLAN':
-            # Similar concise layout for other tabs
-            with st.expander("🔍 Filters", expanded=False):
-                cols = st.columns(2)
+            # Work Log Tab
+            elif current_tab == 'DAILY_WORK_LOG':
+                with st.expander("🔍 Filters", expanded=False):
+                    cols = st.columns(2)
+                    with cols[0]:
+                        employees = ['All'] + list(df['Employee Name'].unique()) if 'Employee Name' in df.columns else ['All']
+                        employee = st.selectbox('Employee', employees, key='work_employee')
+                
+                filtered = df.copy()
+                if employee != 'All': filtered = filtered[filtered['Employee Name'] == employee]
+                
+                cols = st.columns(3)
                 with cols[0]:
-                    priorities = ['All'] + list(df['Priority'].unique()) if 'Priority' in df.columns else ['All']
-                    priority = st.selectbox('Priority', priorities)
+                    st.metric("Total Hours", f"{filtered['Hours Worked'].sum():.1f}")
                 with cols[1]:
-                    statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                    status = st.selectbox('Status', statuses)
+                    total_cost = (filtered['Hours Worked'] * filtered['Employee Hourly Rate']).sum()
+                    st.metric("Total Cost", f"${total_cost:,.0f}")
+                with cols[2]:
+                    st.metric("Entries", len(filtered))
+                
+                if 'Employee Name' in filtered.columns:
+                    chart_data = filtered.groupby('Employee Name')['Hours Worked'].sum().reset_index()
+                    fig = px.bar(chart_data, x='Employee Name', y='Hours Worked',
+                               title="Hours by Employee",
+                               color_discrete_sequence=['#667eea'])
+                    fig.update_layout(height=350, margin=dict(t=30))
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                with st.expander("📋 Details", expanded=True):
+                    st.dataframe(filtered, use_container_width=True, hide_index=True)
             
-            filtered = df.copy()
-            if priority != 'All': filtered = filtered[filtered['Priority'] == priority]
-            if status != 'All': filtered = filtered[filtered['Status'] == status]
+            # Other tabs (simplified)
+            elif current_tab == 'EMPLOYEE_COST':
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                if 'Role' in df.columns and 'Monthly Salary' in df.columns:
+                    chart_data = df.groupby('Role')['Monthly Salary'].sum().reset_index()
+                    fig = px.bar(chart_data, x='Role', y='Monthly Salary',
+                               title="Salary by Role",
+                               color_discrete_sequence=['#667eea'])
+                    st.plotly_chart(fig, use_container_width=True)
             
-            m1, m2, m3 = st.columns(3)
-            with m1:
-                st.metric("Total Tasks", len(filtered))
-            with m2:
-                if 'Status' in filtered.columns:
-                    st.metric("Pending", len(filtered[filtered['Status'] != 'Done']))
-            with m3:
-                if 'Priority' in filtered.columns:
-                    st.metric("High Priority", len(filtered[filtered['Priority'] == 'High']))
-            
-            if 'Owner (Team / Client)' in filtered.columns:
-                fig = px.pie(
-                    filtered['Owner (Team / Client)'].value_counts().reset_index(),
-                    values='count', names='Owner (Team / Client)',
-                    title="Tasks by Owner",
-                    color_discrete_sequence=px.colors.sequential.Viridis
-                )
-                fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with st.expander("📋 View Details", expanded=True):
-                st.dataframe(filtered, use_container_width=True, hide_index=True)
-        
-        # Add similar concise layouts for other tabs...
+            elif current_tab == 'RESOURCE_LINKS':
+                st.info("🔗 Click on links in the table")
+                st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.error("Failed to load data. Please check your connection.")
+
+# --- Auto-refresh using meta tag ---
+st.markdown(f"""
+    <meta http-equiv="refresh" content="{REFRESH_INTERVAL}">
+""", unsafe_allow_html=True)
 
 # --- Minimal Footer ---
 st.markdown("---")
 st.markdown(
     f"<div style='text-align: center; color: #999; font-size: 0.8rem;'>"
-    f"Project Pulse • Live Data • Updated every {REFRESH_INTERVAL}s</div>",
+    f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
