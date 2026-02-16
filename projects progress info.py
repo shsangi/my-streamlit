@@ -78,12 +78,7 @@ st.markdown("""
     .header-left {
         display: flex;
         align-items: center;
-        gap: 2rem;
-    }
-    
-    .header-title {
-        margin: 0;
-        font-size: 2rem;
+        gap: 1rem;
     }
     
     .header-right {
@@ -92,7 +87,17 @@ st.markdown("""
         gap: 2rem;
     }
     
-    /* Status bar inside header left */
+    .header-title {
+        margin: 0;
+        font-size: 2rem;
+    }
+    
+    .header-subtitle {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    /* Status bar inside header */
     .header-status {
         background: rgba(255,255,255,0.2);
         padding: 0.5rem 1rem;
@@ -295,7 +300,12 @@ if st.session_state.data_sheets and not st.session_state.show_original:
     st.markdown(f"""
     <div class="header-container">
         <div class="header-left">
-            <h1 class="header-title">📊 Project Pulse</h1>
+            <div>
+                <h1 class="header-title">📊 Project Pulse</h1>
+                <p class="header-subtitle">Real-time project analytics & tracking</p>
+            </div>
+        </div>
+        <div class="header-right">
             <div class="header-status">
                 <span class="live-badge">LIVE</span>
                 <span class="timestamp">
@@ -303,8 +313,6 @@ if st.session_state.data_sheets and not st.session_state.show_original:
                     <span class="pk-badge">PKT</span>
                 </span>
             </div>
-        </div>
-        <div class="header-right">
             <div class="header-scorecards">
                 <div class="header-scorecard">
                     <div class="header-scorecard-value">{total_projects}</div>
@@ -340,7 +348,10 @@ else:
     st.markdown("""
     <div class="header-container">
         <div class="header-left">
-            <h1 class="header-title">📊 Project Pulse</h1>
+            <div>
+                <h1 class="header-title">📊 Project Pulse</h1>
+                <p class="header-subtitle">Original Sheets View</p>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
