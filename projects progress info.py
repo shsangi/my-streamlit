@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import time
+import pytz
 
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Dynamic Project Dashboard")
@@ -16,6 +17,22 @@ if 'data_sheets' not in st.session_state:
 
 # --- Auto-refresh configuration ---
 REFRESH_INTERVAL = 5  # seconds
+
+# --- Pakistan Timezone ---
+PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
+
+def get_pakistan_time():
+    """Returns current time in Pakistan timezone"""
+    return datetime.now(PAKISTAN_TZ)
+
+def format_pakistan_time(dt):
+    """Format datetime in Pakistan timezone with specified format"""
+    if dt is None:
+        return "Never"
+    if dt.tzinfo is None:
+        # If naive datetime, assume it's in Pakistan time
+        dt = PAKISTAN_TZ.localize(dt)
+    return dt.strftime("%a, %d %b, %Y, %I:%M:%S %p")
 
 # --- Data Loading Function ---
 @st.cache_data(ttl=REFRESH_INTERVAL)  # Cache expires after refresh interval
@@ -40,8 +57,8 @@ def load_data_from_gsheet():
                         df[col] = pd.to_datetime(df[col], errors='coerce')
                     except: pass
         
-        # Update last refresh timestamp in session state
-        st.session_state.last_update = datetime.now()
+        # Update last refresh timestamp in session state with Pakistan time
+        st.session_state.last_update = get_pakistan_time()
         return sheets
     except Exception as e:
         st.error(f"Error loading data: {e}. Please check the URL and sheet names.")
@@ -99,28 +116,54 @@ st.markdown("""
         border-radius: 5px;
         margin-bottom: 10px;
         text-align: center;
+        border-left: 4px solid #4CAF50;
     }
     .auto-refresh-indicator {
         color: #4CAF50;
         font-size: 0.8em;
         margin-left: 10px;
+        background-color: #e8f5e9;
+        padding: 2px 8px;
+        border-radius: 12px;
+    }
+    .pakistan-time-badge {
+        background-color: #2196F3;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
+    .success-message {
+        background-color: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        border-left: 4px solid #28a745;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- Auto-refresh message and timestamp ---
 if st.session_state.last_update:
-    timestamp_str = st.session_state.last_update.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_str = format_pakistan_time(st.session_state.last_update)
     st.markdown(f"""
     <div class="refresh-timestamp">
-        🔄 Data last refreshed: {timestamp_str} 
-        <span class="auto-refresh-indicator">⏱️ Auto-refreshing every {REFRESH_INTERVAL} seconds</span>
+        <span style="font-size: 1.1em;">🔄 Data last refreshed:</span> 
+        <strong>{timestamp_str}</strong> (Pakistan Time)
+        <span class="auto-refresh-indicator">⏱️ Every {REFRESH_INTERVAL}s</span>
+        <span class="pakistan-time-badge">🇵🇰 PKT</span>
     </div>
     """, unsafe_allow_html=True)
     
     # Show success message on initial load or refresh
     if 'last_shown_time' not in st.session_state or st.session_state.last_shown_time != st.session_state.last_update:
-        st.success(f"✅ Data loaded successfully at {timestamp_str}")
+        st.markdown(f"""
+        <div class="success-message">
+            ✅ Data loaded successfully at {timestamp_str} (Pakistan Time)
+        </div>
+        """, unsafe_allow_html=True)
         st.session_state.last_shown_time = st.session_state.last_update
 
 # --- Create Two Main Columns: Left for Icons, Right for Content ---
@@ -152,6 +195,15 @@ with left_col:
 
     st.divider()
     st.caption("Dynamic Content Panels")
+    
+    # Show current Pakistan time in sidebar
+    current_pk_time = format_pakistan_time(get_pakistan_time())
+    st.markdown(f"""
+    <div style="text-align: center; margin-top: 20px; padding: 10px; background-color: #e3f2fd; border-radius: 5px;">
+        <small>🇵🇰 Current Pakistan Time</small><br>
+        <strong>{current_pk_time}</strong>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- Right Column: Dynamic Content Based on Selected Tab ---
 with right_col:
@@ -348,7 +400,7 @@ st.markdown(f"""
     </script>
 """, unsafe_allow_html=True)
 
-# --- Footer with current time ---
+# --- Footer with Pakistan time ---
 st.divider()
-current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-st.caption(f"Dynamic Dashboard - Auto-refreshes every {REFRESH_INTERVAL} seconds | Page rendered: {current_time}")
+current_pk_time = format_pakistan_time(get_pakistan_time())
+st.caption(f"🇵🇰 Dynamic Dashboard - Auto-refreshes every {REFRESH_INTERVAL} seconds | Pakistan Time: {current_pk_time}")
