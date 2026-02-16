@@ -225,9 +225,6 @@ st.markdown("""
 <div class="header-container">
     <div style="display: flex; align-items: center; gap: 1rem;">
         <h1 style="margin: 0; font-size: 2rem;">📊 Project Pulse</h1>
-        <span style="background: rgba(255,255,255,0.2); padding: 0.25rem 1rem; border-radius: 50px; font-size: 0.9rem;">
-            Live Dashboard
-        </span>
     </div>
     <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Real-time project analytics & tracking</p>
 </div>
@@ -510,4 +507,5 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
 
