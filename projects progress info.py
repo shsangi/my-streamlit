@@ -302,17 +302,17 @@ if st.session_state.data_sheets and not st.session_state.show_original:
         <div class="header-left">
             <div>
                 <h1 class="header-title">📊 Project Pulse</h1>
-                <p class="header-subtitle"><div class="header-status">
+                <p class="header-subtitle">Real-time project analytics & tracking</p>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="header-status">
                 <span class="live-badge">LIVE</span>
                 <span class="timestamp">
                     <span>🔄 {timestamp_str}</span>
                     <span class="pk-badge">PKT</span>
                 </span>
-            </div></p>
             </div>
-        </div>
-        <div class="header-right">
-            
             <div class="header-scorecards">
                 <div class="header-scorecard">
                     <div class="header-scorecard-value">{total_projects}</div>
@@ -538,4 +538,3 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
-
