@@ -70,19 +70,42 @@ st.markdown("""
         margin-bottom: 1.5rem;
         color: white;
         box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-    }
-    
-    /* Status bar */
-    .status-bar {
-        background: white;
-        padding: 0.75rem 1.5rem;
-        border-radius: 50px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        border: 1px solid #f0f0f0;
+    }
+    
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+    }
+    
+    .header-title {
+        margin: 0;
+        font-size: 2rem;
+    }
+    
+    .header-subtitle {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    /* Status bar inside header */
+    .header-status {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        backdrop-filter: blur(10px);
     }
     
     .live-badge {
@@ -103,7 +126,7 @@ st.markdown("""
     }
     
     .timestamp {
-        color: #666;
+        color: white;
         font-size: 0.9rem;
         display: flex;
         align-items: center;
@@ -119,7 +142,42 @@ st.markdown("""
         font-weight: 500;
     }
     
-    /* Scorecards banner */
+    /* Scorecards banner inside header */
+    .header-scorecards {
+        display: flex;
+        gap: 1rem;
+    }
+    
+    .header-scorecard {
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+        text-align: center;
+        min-width: 100px;
+        backdrop-filter: blur(10px);
+        border-left: 4px solid rgba(255,255,255,0.5);
+    }
+    
+    .header-scorecard-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: white;
+        line-height: 1.2;
+    }
+    
+    .header-scorecard-label {
+        font-size: 0.7rem;
+        color: rgba(255,255,255,0.9);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .header-scorecard-sub {
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.8);
+    }
+    
+    /* Scorecards banner (original - kept for non-header display) */
     .scorecard-banner {
         background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         padding: 1.5rem;
@@ -220,107 +278,83 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
-st.markdown("""
-<div class="header-container">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-        <h1 style="margin: 0; font-size: 2rem;">📊 Project Pulse</h1>
-    </div>
-    <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Real-time project analytics & tracking</p>
-</div>
-""", unsafe_allow_html=True)
-
-# --- Status Bar ---
-if st.session_state.last_update:
-    timestamp_str = st.session_state.last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p")
+# --- Header with Integrated Status and Scorecards ---
+if st.session_state.data_sheets and not st.session_state.show_original:
+    df_projects = st.session_state.data_sheets['PROJECT_MASTER']
+    df_work = st.session_state.data_sheets['DAILY_WORK_LOG']
+    df_cost = st.session_state.data_sheets['EMPLOYEE_COST']
+    df_tasks = st.session_state.data_sheets['TASK_PLAN']
+    df_resources = st.session_state.data_sheets['RESOURCE_LINKS']
+    
+    # Calculate metrics
+    total_projects = len(df_projects) if not df_projects.empty else 0
+    active_projects = len(df_projects[df_projects['Status'] == 'Active']) if not df_projects.empty and 'Status' in df_projects.columns else 0
+    total_hours = df_work['Hours Worked'].sum() if not df_work.empty else 0
+    total_salary = df_cost['Monthly Salary'].sum() if not df_cost.empty and 'Monthly Salary' in df_cost.columns else 0
+    total_tasks = len(df_tasks) if not df_tasks.empty else 0
+    pending_tasks = len(df_tasks[df_tasks['Status'] != 'Done']) if not df_tasks.empty and 'Status' in df_tasks.columns else 0
+    total_resources = len(df_resources) if not df_resources.empty else 0
+    
+    timestamp_str = st.session_state.last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p") if st.session_state.last_update else ""
+    
     st.markdown(f"""
-    <div class="status-bar">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <span class="live-badge">LIVE</span>
-            <span class="timestamp">
-                <span>🔄 {timestamp_str}</span>
-                <span class="pk-badge">PKT</span>
-            </span>
+    <div class="header-container">
+        <div class="header-left">
+            <div>
+                <h1 class="header-title">📊 Project Pulse</h1>
+                <p class="header-subtitle">Real-time project analytics & tracking</p>
+            </div>
         </div>
-
+        <div class="header-right">
+            <div class="header-status">
+                <span class="live-badge">LIVE</span>
+                <span class="timestamp">
+                    <span>🔄 {timestamp_str}</span>
+                    <span class="pk-badge">PKT</span>
+                </span>
+            </div>
+            <div class="header-scorecards">
+                <div class="header-scorecard">
+                    <div class="header-scorecard-value">{total_projects}</div>
+                    <div class="header-scorecard-label">Projects</div>
+                    <div class="header-scorecard-sub">{active_projects} Active</div>
+                </div>
+                <div class="header-scorecard">
+                    <div class="header-scorecard-value">{total_hours:.0f}</div>
+                    <div class="header-scorecard-label">Hours</div>
+                    <div class="header-scorecard-sub">Work Log</div>
+                </div>
+                <div class="header-scorecard">
+                    <div class="header-scorecard-value">${total_salary:,.0f}</div>
+                    <div class="header-scorecard-label">Salary</div>
+                    <div class="header-scorecard-sub">Monthly</div>
+                </div>
+                <div class="header-scorecard">
+                    <div class="header-scorecard-value">{total_tasks}</div>
+                    <div class="header-scorecard-label">Tasks</div>
+                    <div class="header-scorecard-sub">{pending_tasks} Pending</div>
+                </div>
+                <div class="header-scorecard">
+                    <div class="header-scorecard-value">{total_resources}</div>
+                    <div class="header-scorecard-label">Resources</div>
+                    <div class="header-scorecard-sub">Links</div>
+                </div>
+            </div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
-
-# --- Scorecards Banner (Top) ---
-if st.session_state.data_sheets and not st.session_state.show_original:
-    st.markdown('<div class="scorecard-banner">', unsafe_allow_html=True)
-    st.markdown("##### 📈 Key Metrics Overview")
-    
-    cols = st.columns(5)
-    
-    # Project Master Metrics
-    df_projects = st.session_state.data_sheets['PROJECT_MASTER']
-    with cols[0]:
-        if not df_projects.empty:
-            total_projects = len(df_projects)
-            active_projects = len(df_projects[df_projects['Status'] == 'Active']) if 'Status' in df_projects.columns else 0
-            st.markdown(f"""
-            <div class="scorecard">
-                <div class="scorecard-value">{total_projects}</div>
-                <div class="scorecard-label">Total Projects</div>
-                <div style="font-size:0.8rem; color:#48bb78;">{active_projects} Active</div>
+else:
+    # Simple header for original sheets view
+    st.markdown("""
+    <div class="header-container">
+        <div class="header-left">
+            <div>
+                <h1 class="header-title">📊 Project Pulse</h1>
+                <p class="header-subtitle">Original Sheets View</p>
             </div>
-            """, unsafe_allow_html=True)
-    
-    # Work Log Metrics
-    df_work = st.session_state.data_sheets['DAILY_WORK_LOG']
-    with cols[1]:
-        if not df_work.empty:
-            total_hours = df_work['Hours Worked'].sum()
-            st.markdown(f"""
-            <div class="scorecard">
-                <div class="scorecard-value">{total_hours:.0f}</div>
-                <div class="scorecard-label">Total Hours</div>
-                <div style="font-size:0.8rem; color:#667eea;">Work Log</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Employee Cost Metrics
-    df_cost = st.session_state.data_sheets['EMPLOYEE_COST']
-    with cols[2]:
-        if not df_cost.empty:
-            total_salary = df_cost['Monthly Salary'].sum() if 'Monthly Salary' in df_cost.columns else 0
-            st.markdown(f"""
-            <div class="scorecard">
-                <div class="scorecard-value">${total_salary:,.0f}</div>
-                <div class="scorecard-label">Monthly Salary</div>
-                <div style="font-size:0.8rem; color:#f59e0b;">Total Cost</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Task Metrics
-    df_tasks = st.session_state.data_sheets['TASK_PLAN']
-    with cols[3]:
-        if not df_tasks.empty:
-            total_tasks = len(df_tasks)
-            pending_tasks = len(df_tasks[df_tasks['Status'] != 'Done']) if 'Status' in df_tasks.columns else 0
-            st.markdown(f"""
-            <div class="scorecard">
-                <div class="scorecard-value">{total_tasks}</div>
-                <div class="scorecard-label">Total Tasks</div>
-                <div style="font-size:0.8rem; color:#f56565;">{pending_tasks} Pending</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Resource Links Metrics
-    df_resources = st.session_state.data_sheets['RESOURCE_LINKS']
-    with cols[4]:
-        if not df_resources.empty:
-            total_resources = len(df_resources)
-            st.markdown(f"""
-            <div class="scorecard">
-                <div class="scorecard-value">{total_resources}</div>
-                <div class="scorecard-label">Resources</div>
-                <div style="font-size:0.8rem; color:#9f7aea;">Links</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- Main Layout ---
 if st.session_state.show_original:
@@ -504,7 +538,3 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
-
-
-
-
