@@ -4,174 +4,311 @@ import plotly.express as px
 from datetime import datetime
 import pytz
 
+# --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Project Pulse", page_icon="📊", initial_sidebar_state="collapsed")
 
-REFRESH_INTERVAL, PAKISTAN_TZ = 5, pytz.timezone('Asia/Karachi')
+# --- Constants ---
+REFRESH_INTERVAL = 5
+PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
 DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrcJFa6eyrMeyc25Aqm_dLgfpuEBr0WCdc4OTKKZVK2Y6IfOoPdQFbYmSdrSYP/pub?output=xlsx"
 
-for key in ['tab', 'data', 'original', 'filters']:
+# --- Initialize Session State ---
+for key in ['selected_tab', 'last_update', 'data_sheets', 'show_original', 'filters']:
     if key not in st.session_state:
-        st.session_state[key] = 'PROJECT_MASTER' if key == 'tab' else ({} if key == 'filters' else None if key != 'original' else False)
+        if key == 'selected_tab': st.session_state[key] = 'PROJECT_MASTER'
+        elif key == 'filters': st.session_state[key] = {}
+        else: st.session_state[key] = None if key != 'show_original' else False
 
+# --- Data Loading Function ---
 @st.cache_data(ttl=REFRESH_INTERVAL)
 def load_data():
     try:
         xl = pd.ExcelFile(DATA_URL)
-        sheets = {name: pd.read_excel(xl, sheet) for name, sheet in 
-                 [('PROJECT_MASTER','PROJECT_MASTER'), ('DAILY_WORK_LOG','DAILY_WORK_LOG'),
-                  ('EMPLOYEE_COST','EMPLOYEE_COST'), ('RESOURCE_LINKS','RESOURCE_LINKS'),
-                  ('TASK_PLAN','TASK PLAN + RESPONSIBILITY')]}
+        sheets = {
+            'PROJECT_MASTER': pd.read_excel(xl, 'PROJECT_MASTER'),
+            'DAILY_WORK_LOG': pd.read_excel(xl, 'DAILY_WORK_LOG'),
+            'EMPLOYEE_COST': pd.read_excel(xl, 'EMPLOYEE_COST'),
+            'RESOURCE_LINKS': pd.read_excel(xl, 'RESOURCE_LINKS'),
+            'TASK_PLAN': pd.read_excel(xl, 'TASK PLAN + RESPONSIBILITY')
+        }
         return sheets, datetime.now(PAKISTAN_TZ)
-    except:
-        return {name: pd.DataFrame() for name in ['PROJECT_MASTER','DAILY_WORK_LOG','EMPLOYEE_COST','RESOURCE_LINKS','TASK_PLAN']}, None
+    except Exception as e:
+        st.error(f"⚠️ Data load failed: {str(e)}")
+        return {name: pd.DataFrame() for name in ['PROJECT_MASTER', 'DAILY_WORK_LOG', 'EMPLOYEE_COST', 'RESOURCE_LINKS', 'TASK_PLAN']}, None
 
-data, last = load_data()
-if last: st.session_state.update({'data': data, 'last': last})
+# --- Load Data ---
+data_sheets, last_update = load_data()
+if last_update:
+    st.session_state.last_update = last_update
+    st.session_state.data_sheets = data_sheets
 
+# --- Custom CSS ---
 st.markdown("""
 <style>
-.header-container{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:1rem 2rem;border-radius:20px;margin-bottom:1rem;color:white;display:flex;align-items:center;justify-content:space-between}
-.header-title{margin:0;font-size:2rem}
-.live-badge{background:#ff4444;color:white;padding:0.2rem 0.7rem;border-radius:20px;font-size:0.75rem;animation:pulse 2s infinite}
-@keyframes pulse{0%{opacity:1}50%{opacity:0.7}100%{opacity:1}}
-.timestamp{color:white;font-size:0.9rem}
-.pk-badge{background:#2c3e50;color:white;padding:0.2rem 0.7rem;border-radius:20px}
-.header-scorecards{display:flex;gap:1rem}
-.header-scorecard{background:rgba(255,255,255,0.2);padding:0.5rem 1rem;border-radius:12px;text-align:center;min-width:90px}
-.header-scorecard-value{font-size:1.2rem;font-weight:700}
-.secondary-scorecards{background:#f8f9fa;padding:1rem;border-radius:15px;margin:1rem 0;border:1px solid #dee2e6}
-.scorecard{background:white;padding:0.8rem;border-radius:10px;text-align:center;border-left:4px solid #667eea}
-.scorecard-value{font-size:1.5rem;font-weight:700;color:#2d3748}
-.table-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem}
-.table-shape{background:#e2e8f0;padding:0.2rem 0.8rem;border-radius:15px;font-size:0.8rem}
-.stButton>button{width:100%;text-align:left}
-#MainMenu,footer,.stDeployButton{visibility:hidden}
+    .header-container { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1rem 2rem; border-radius: 20px; margin-bottom: 1rem; color: white; display: flex; align-items: center; justify-content: space-between; }
+    .header-title { margin: 0; font-size: 2rem; }
+    .header-subtitle { margin: 0.2rem 0 0 0; display: flex; align-items: center; gap: 0.5rem; }
+    .live-badge { background: #ff4444; color: white; padding: 0.2rem 0.7rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; animation: pulse 2s infinite; }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    .timestamp { color: white; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+    .pk-badge { background: #2c3e50; color: white; padding: 0.2rem 0.7rem; border-radius: 20px; font-size: 0.75rem; }
+    .header-scorecards { display: flex; gap: 1rem; }
+    .header-scorecard { background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 12px; text-align: center; min-width: 90px; backdrop-filter: blur(10px); }
+    .header-scorecard-value { font-size: 1.2rem; font-weight: 700; color: white; }
+    .header-scorecard-label { font-size: 0.7rem; color: rgba(255,255,255,0.9); text-transform: uppercase; }
+    .header-scorecard-sub { font-size: 0.65rem; color: rgba(255,255,255,0.8); }
+    .secondary-scorecards { background: #f8f9fa; padding: 1rem; border-radius: 15px; margin: 1rem 0; border: 1px solid #dee2e6; }
+    .scorecard { background: white; padding: 0.8rem; border-radius: 10px; text-align: center; border-left: 4px solid #667eea; }
+    .scorecard-value { font-size: 1.5rem; font-weight: 700; color: #2d3748; }
+    .scorecard-label { font-size: 0.8rem; color: #718096; }
+    .tab-container { background: white; border-radius: 15px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .stButton > button { width: 100%; text-align: left; border-radius: 10px; margin: 0.2rem 0; }
+    .reset-btn { background: #ff4444; color: white; }
+    .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .table-name { font-weight: 600; color: #2d3748; font-size: 1rem; }
+    .table-shape { background: #e2e8f0; padding: 0.2rem 0.8rem; border-radius: 15px; font-size: 0.8rem; color: #4a5568; }
+    .no-filters-msg { background: #e2e8f0; padding: 0.5rem 1rem; border-radius: 10px; color: #4a5568; font-size: 0.9rem; text-align: center; }
+    #MainMenu, footer, .stDeployButton { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-if st.session_state.data and not st.session_state.original:
-    df = {k: v for k, v in st.session_state.data.items()}
-    ts = st.session_state.last.strftime("%a, %d %b, %Y, %I:%M:%S %p")
+# --- Header ---
+if st.session_state.data_sheets and not st.session_state.show_original:
+    df_p = st.session_state.data_sheets['PROJECT_MASTER']
+    df_w = st.session_state.data_sheets['DAILY_WORK_LOG']
+    df_c = st.session_state.data_sheets['EMPLOYEE_COST']
+    df_t = st.session_state.data_sheets['TASK_PLAN']
+    df_r = st.session_state.data_sheets['RESOURCE_LINKS']
+    
+    metrics = {
+        'total_projects': len(df_p) if not df_p.empty else 0,
+        'active_projects': len(df_p[df_p['Status'] == 'Active']) if not df_p.empty and 'Status' in df_p.columns else 0,
+        'total_hours': df_w['Hours Worked'].sum() if not df_w.empty else 0,
+        'total_salary': df_c['Monthly Salary'].sum() if not df_c.empty and 'Monthly Salary' in df_c.columns else 0,
+        'total_tasks': len(df_t) if not df_t.empty else 0,
+        'pending_tasks': len(df_t[df_t['Status'] != 'Done']) if not df_t.empty and 'Status' in df_t.columns else 0,
+        'total_resources': len(df_r) if not df_r.empty else 0
+    }
+    
+    timestamp = st.session_state.last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p") if st.session_state.last_update else ""
+    
     st.markdown(f"""
     <div class="header-container">
-        <div><h1 class="header-title">📊 Project Pulse</h1><p><span class="live-badge">LIVE</span> <span class="timestamp">🔄 {ts} <span class="pk-badge">PKT</span></span></p></div>
+        <div>
+            <h1 class="header-title">📊 Project Pulse</h1>
+            <p class="header-subtitle">
+                <span class="live-badge">LIVE</span>
+                <span class="timestamp">🔄 {timestamp} <span class="pk-badge">PKT</span></span>
+            </p>
+        </div>
         <div class="header-scorecards">
-            <div class="header-scorecard"><div class="header-scorecard-value">{len(df['PROJECT_MASTER'])}</div><div>Projects</div><div>{len(df['PROJECT_MASTER'][df['PROJECT_MASTER']['Status']=='Active']) if 'Status' in df['PROJECT_MASTER'] else 0} Active</div></div>
-            <div class="header-scorecard"><div class="header-scorecard-value">{df['DAILY_WORK_LOG']['Hours Worked'].sum() if not df['DAILY_WORK_LOG'].empty else 0:.0f}</div><div>Hours</div></div>
-            <div class="header-scorecard"><div class="header-scorecard-value">${df['EMPLOYEE_COST']['Monthly Salary'].sum() if not df['EMPLOYEE_COST'].empty else 0:,.0f}</div><div>Salary</div></div>
-            <div class="header-scorecard"><div class="header-scorecard-value">{len(df['TASK_PLAN'])}</div><div>Tasks</div><div>{len(df['TASK_PLAN'][df['TASK_PLAN']['Status']!='Done']) if 'Status' in df['TASK_PLAN'] else 0} Pending</div></div>
-            <div class="header-scorecard"><div class="header-scorecard-value">{len(df['RESOURCE_LINKS'])}</div><div>Resources</div></div>
+            <div class="header-scorecard"><div class="header-scorecard-value">{metrics['total_projects']}</div><div class="header-scorecard-label">Projects</div><div class="header-scorecard-sub">{metrics['active_projects']} Active</div></div>
+            <div class="header-scorecard"><div class="header-scorecard-value">{metrics['total_hours']:.0f}</div><div class="header-scorecard-label">Hours</div><div class="header-scorecard-sub">Work Log</div></div>
+            <div class="header-scorecard"><div class="header-scorecard-value">${metrics['total_salary']:,.0f}</div><div class="header-scorecard-label">Salary</div><div class="header-scorecard-sub">Monthly</div></div>
+            <div class="header-scorecard"><div class="header-scorecard-value">{metrics['total_tasks']}</div><div class="header-scorecard-label">Tasks</div><div class="header-scorecard-sub">{metrics['pending_tasks']} Pending</div></div>
+            <div class="header-scorecard"><div class="header-scorecard-value">{metrics['total_resources']}</div><div class="header-scorecard-label">Resources</div><div class="header-scorecard-sub">Links</div></div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 else:
-    st.markdown("<div class='header-container'><div><h1 class='header-title'>📊 Project Pulse</h1><p>Original Sheets View</p></div></div>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="header-container">
+        <div><h1 class="header-title">📊 Project Pulse</h1><p class="header-subtitle">Original Sheets View</p></div>
+    </div>
+    """, unsafe_allow_html=True)
 
-if st.session_state.original:
+# --- Main Layout ---
+if st.session_state.show_original:
     st.markdown("### 📋 Original Sheets Data")
-    if st.button("← Back to Dashboard"): st.session_state.original = False; st.rerun()
-    tabs = st.tabs(list(st.session_state.data.keys()))
-    for i, (name, df) in enumerate(st.session_state.data.items()):
-        with tabs[i]:
-            st.markdown(f"<div class='table-header'><span>📄 {name}</span><span class='table-shape'>{df.shape[0]} rows × {df.shape[1]} cols</span></div>", unsafe_allow_html=True)
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.download_button(f"📥 Download", df.to_csv(index=False).encode(), f"{name}.csv")
-else:
-    l, r = st.columns([1, 4])
-    with l:
-        st.markdown("<div style='background:white;padding:1rem;border-radius:15px'>")
-        st.markdown("📋 Navigation")
-        tabs = {'PROJECT_MASTER':'📁 Projects','DAILY_WORK_LOG':'📝 Work Log','EMPLOYEE_COST':'💰 Costs','RESOURCE_LINKS':'🔗 Resources','TASK_PLAN':'✅ Tasks'}
-        for k, v in tabs.items():
-            if st.button(v, key=k, use_container_width=True, type="secondary" if st.session_state.tab != k else "primary"):
-                st.session_state.tab = k; st.session_state.filters = {}; st.rerun()
-        st.markdown("<hr>")
-        if st.button("📋 View Original Sheets", use_container_width=True): st.session_state.original = True; st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+    if st.button("← Back to Dashboard", type="primary"):
+        st.session_state.show_original = False
+        st.rerun()
     
-    with r:
-        cur, df = st.session_state.tab, st.session_state.data[st.session_state.tab].copy()
-        st.markdown(f"### {tabs[cur]}")
+    tabs = st.tabs(list(st.session_state.data_sheets.keys()))
+    for i, (sheet_name, df) in enumerate(st.session_state.data_sheets.items()):
+        with tabs[i]:
+            # Table header with shape for original sheets
+            st.markdown(f"""
+            <div class="table-header">
+                <span class="table-name">📄 {sheet_name.replace('_', ' ').title()}</span>
+                <span class="table-shape">{df.shape[0]} rows × {df.shape[1]} columns</span>
+            </div>
+            """, unsafe_allow_html=True)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(f"📥 Download {sheet_name}", csv, f"{sheet_name}.csv", "text/csv")
+else:
+    left_col, right_col = st.columns([1, 4])
+    
+    with left_col:
+        st.markdown('<div class="tab-container">', unsafe_allow_html=True)
+        st.markdown('<div class="nav-header">📋 Navigation</div>', unsafe_allow_html=True)
         
-        if not df.empty:
-            if cur != 'RESOURCE_LINKS':
-                with st.expander("🔍 Filters"):
+        tabs = {'PROJECT_MASTER': '📁 Projects', 'DAILY_WORK_LOG': '📝 Work Log', 'EMPLOYEE_COST': '💰 Costs', 
+                'RESOURCE_LINKS': '🔗 Resources', 'TASK_PLAN': '✅ Tasks'}
+        
+        for key, label in tabs.items():
+            if st.button(label, key=f"nav_{key}", use_container_width=True, 
+                        type="secondary" if st.session_state.selected_tab != key else "primary"):
+                st.session_state.selected_tab = key
+                st.session_state.filters = {}
+                st.rerun()
+        
+        st.markdown("<hr>", unsafe_allow_html=True)
+        if st.button("📋 View Original Sheets", use_container_width=True):
+            st.session_state.show_original = True
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with right_col:
+        current = st.session_state.selected_tab
+        st.markdown(f"### {tabs[current]}")
+        
+        if st.session_state.data_sheets and not st.session_state.data_sheets[current].empty:
+            df = st.session_state.data_sheets[current].copy()
+            
+            # Drop NaN values from filter columns
+            for col in df.columns:
+                if df[col].dtype == 'object':  # Only for string columns
+                    df[col] = df[col].fillna('Unknown')
+            
+            # Filters and Reset Button - Skip for RESOURCE_LINKS
+            if current != 'RESOURCE_LINKS':
+                with st.expander("🔍 Filters", expanded=True):
                     cols = st.columns([3, 1])
                     with cols[0]:
-                        if cur == 'PROJECT_MASTER':
-                            c1, c2, c3 = st.columns(3)
-                            with c1: f1 = st.selectbox('Company', ['All'] + [x for x in df['Company name'].dropna().unique() if pd.notna(x)], key='comp')
-                            with c2: f2 = st.selectbox('Status', ['All'] + [x for x in df['Status'].dropna().unique() if pd.notna(x)], key='stat')
-                            with c3: f3 = st.selectbox('Quarter', ['All'] + [x for x in df['Quarter'].dropna().unique() if pd.notna(x)], key='quart')
-                            st.session_state.filters = {'company':f1,'status':f2,'quarter':f3}
-                        elif cur == 'TASK_PLAN':
-                            c1, c2, c3 = st.columns(3)
-                            with c1: f1 = st.selectbox('Priority', ['All'] + [x for x in df['Priority'].dropna().unique() if pd.notna(x)], key='pri')
-                            with c2: f2 = st.selectbox('Status', ['All'] + [x for x in df['Status'].dropna().unique() if pd.notna(x)], key='stat2')
-                            with c3: f3 = st.selectbox('Owner', ['All'] + [x for x in df['Owner (Team / Client)'].dropna().unique() if pd.notna(x)], key='own')
-                            st.session_state.filters = {'priority':f1,'status':f2,'owner':f3}
-                        elif cur == 'DAILY_WORK_LOG':
-                            f1 = st.selectbox('Employee', ['All'] + [x for x in df['Employee Name'].dropna().unique() if pd.notna(x)])
-                            st.session_state.filters = {'employee':f1}
-                        elif cur == 'EMPLOYEE_COST':
-                            f1 = st.selectbox('Role', ['All'] + [x for x in df['Role'].dropna().unique() if pd.notna(x)])
-                            st.session_state.filters = {'role':f1}
+                        if current == 'PROJECT_MASTER':
+                            filter_cols = st.columns(3)
+                            with filter_cols[0]:
+                                companies = ['All'] + sorted([x for x in df['Company name'].unique() if x != 'Unknown']) if 'Company name' in df.columns else ['All']
+                                st.session_state.filters['company'] = st.selectbox('Company', companies, index=0, key='f_comp')
+                            with filter_cols[1]:
+                                statuses = ['All'] + sorted([x for x in df['Status'].unique() if x != 'Unknown']) if 'Status' in df.columns else ['All']
+                                st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
+                            with filter_cols[2]:
+                                quarters = ['All'] + sorted([x for x in df['Quarter'].unique() if x != 'Unknown']) if 'Quarter' in df.columns else ['All']
+                                st.session_state.filters['quarter'] = st.selectbox('Quarter', quarters, index=0, key='f_quart')
+                        
+                        elif current == 'TASK_PLAN':
+                            filter_cols = st.columns(3)
+                            with filter_cols[0]:
+                                priorities = ['All'] + sorted([x for x in df['Priority'].unique() if x != 'Unknown']) if 'Priority' in df.columns else ['All']
+                                st.session_state.filters['priority'] = st.selectbox('Priority', priorities, index=0, key='f_pri')
+                            with filter_cols[1]:
+                                statuses = ['All'] + sorted([x for x in df['Status'].unique() if x != 'Unknown']) if 'Status' in df.columns else ['All']
+                                st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
+                            with filter_cols[2]:
+                                owners = ['All'] + sorted([x for x in df['Owner (Team / Client)'].unique() if x != 'Unknown']) if 'Owner (Team / Client)' in df.columns else ['All']
+                                st.session_state.filters['owner'] = st.selectbox('Owner', owners, index=0, key='f_own')
+                        
+                        elif current == 'DAILY_WORK_LOG':
+                            employees = ['All'] + sorted([x for x in df['Employee Name'].unique() if x != 'Unknown']) if 'Employee Name' in df.columns else ['All']
+                            st.session_state.filters['employee'] = st.selectbox('Employee', employees, index=0, key='f_emp')
+                        
+                        elif current == 'EMPLOYEE_COST':
+                            roles = ['All'] + sorted([x for x in df['Role'].unique() if x != 'Unknown']) if 'Role' in df.columns else ['All']
+                            st.session_state.filters['role'] = st.selectbox('Role', roles, index=0, key='f_role')
+                    
                     with cols[1]:
                         st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("🔄 Reset", use_container_width=True): st.session_state.filters = {}; st.rerun()
+                        if st.button("🔄 Reset All Filters", use_container_width=True, type="primary"):
+                            st.session_state.filters = {}
+                            st.rerun()
             else:
-                st.info("🔗 Resource Links - No filters")
+                # Message for Resource Links (no filters)
+                st.markdown('<div class="no-filters-msg">🔗 Resource Links View - No filters available</div>', unsafe_allow_html=True)
             
-            # Apply filters
+            # Apply filters (skip for RESOURCE_LINKS)
             filtered = df.copy()
-            if cur == 'PROJECT_MASTER' and st.session_state.filters:
-                if st.session_state.filters.get('company','All')!='All': filtered = filtered[filtered['Company name']==st.session_state.filters['company']]
-                if st.session_state.filters.get('status','All')!='All': filtered = filtered[filtered['Status']==st.session_state.filters['status']]
-                if st.session_state.filters.get('quarter','All')!='All': filtered = filtered[filtered['Quarter']==st.session_state.filters['quarter']]
-            elif cur == 'TASK_PLAN' and st.session_state.filters:
-                if st.session_state.filters.get('priority','All')!='All': filtered = filtered[filtered['Priority']==st.session_state.filters['priority']]
-                if st.session_state.filters.get('status','All')!='All': filtered = filtered[filtered['Status']==st.session_state.filters['status']]
-                if st.session_state.filters.get('owner','All')!='All': filtered = filtered[filtered['Owner (Team / Client)']==st.session_state.filters['owner']]
-            elif cur == 'DAILY_WORK_LOG' and st.session_state.filters.get('employee','All')!='All':
-                filtered = filtered[filtered['Employee Name']==st.session_state.filters['employee']]
-            elif cur == 'EMPLOYEE_COST' and st.session_state.filters.get('role','All')!='All':
-                filtered = filtered[filtered['Role']==st.session_state.filters['role']]
+            if current != 'RESOURCE_LINKS':
+                if current == 'PROJECT_MASTER':
+                    if st.session_state.filters.get('company', 'All') != 'All': filtered = filtered[filtered['Company name'] == st.session_state.filters['company']]
+                    if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
+                    if st.session_state.filters.get('quarter', 'All') != 'All': filtered = filtered[filtered['Quarter'] == st.session_state.filters['quarter']]
+                elif current == 'TASK_PLAN':
+                    if st.session_state.filters.get('priority', 'All') != 'All': filtered = filtered[filtered['Priority'] == st.session_state.filters['priority']]
+                    if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
+                    if st.session_state.filters.get('owner', 'All') != 'All': filtered = filtered[filtered['Owner (Team / Client)'] == st.session_state.filters['owner']]
+                elif current == 'DAILY_WORK_LOG' and st.session_state.filters.get('employee', 'All') != 'All':
+                    filtered = filtered[filtered['Employee Name'] == st.session_state.filters['employee']]
+                elif current == 'EMPLOYEE_COST' and st.session_state.filters.get('role', 'All') != 'All':
+                    filtered = filtered[filtered['Role'] == st.session_state.filters['role']]
             
-            # Metrics
-            st.markdown("<div class='secondary-scorecards'><h5>📊 Metrics</h5><div style='display:grid;grid-template-columns:repeat(4,1fr);gap:1rem'>", unsafe_allow_html=True)
-            metrics = {
-                'PROJECT_MASTER': [(len(filtered),'Projects'), (filtered['Budget'].sum() if 'Budget' in filtered else 0,'Budget $'),
-                                   (len(filtered[filtered['Status']=='Active']) if 'Status' in filtered else 0,'Active'),
-                                   (filtered['Company name'].nunique() if 'Company name' in filtered else 0,'Companies')],
-                'TASK_PLAN': [(len(filtered),'Tasks'), (len(filtered[filtered['Status']=='Done']) if 'Status' in filtered else 0,'Done'),
-                             (len(filtered[filtered['Priority']=='High']) if 'Priority' in filtered else 0,'High Priority'),
-                             (filtered['Owner (Team / Client)'].nunique() if 'Owner (Team / Client)' in filtered else 0,'Owners')],
-                'DAILY_WORK_LOG': [(len(filtered),'Entries'), (filtered['Hours Worked'].sum() if 'Hours Worked' in filtered else 0,'Total Hrs'),
-                                  (filtered['Hours Worked'].mean() if 'Hours Worked' in filtered else 0,'Avg Hrs'),
-                                  (filtered['Employee Name'].nunique() if 'Employee Name' in filtered else 0,'Employees')],
-                'EMPLOYEE_COST': [(len(filtered),'Employees'), (filtered['Monthly Salary'].sum() if 'Monthly Salary' in filtered else 0,'Total $'),
-                                 (filtered['Monthly Salary'].mean() if 'Monthly Salary' in filtered else 0,'Avg $'),
-                                 (filtered['Role'].nunique() if 'Role' in filtered else 0,'Roles')],
-                'RESOURCE_LINKS': [(len(filtered),'Resources'), (filtered['Type'].nunique() if 'Type' in filtered else 0,'Types'),
-                                  (filtered['Category'].nunique() if 'Category' in filtered else 0,'Categories'), (0,'')]
-            }
-            for v, l in metrics[cur][:4]:
-                st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{v if isinstance(v,str) else f'{v:,.0f}'}</div><div>{l}</div></div>", unsafe_allow_html=True)
-            st.markdown("</div></div>", unsafe_allow_html=True)
-            
-            # Charts
-            if cur == 'PROJECT_MASTER' and 'Company name' in filtered and 'Budget' in filtered:
-                st.plotly_chart(px.bar(filtered.groupby('Company name')['Budget'].sum().reset_index(), x='Company name', y='Budget'), use_container_width=True)
-            elif cur == 'TASK_PLAN' and 'Owner (Team / Client)' in filtered:
-                st.plotly_chart(px.pie(filtered['Owner (Team / Client)'].value_counts().reset_index(), values='count', names='Owner (Team / Client)'), use_container_width=True)
-            elif cur == 'DAILY_WORK_LOG' and 'Employee Name' in filtered and 'Hours Worked' in filtered:
-                st.plotly_chart(px.bar(filtered.groupby('Employee Name')['Hours Worked'].sum().reset_index(), x='Employee Name', y='Hours Worked'), use_container_width=True)
-            elif cur == 'EMPLOYEE_COST' and 'Role' in filtered and 'Monthly Salary' in filtered:
-                st.plotly_chart(px.bar(filtered.groupby('Role')['Monthly Salary'].sum().reset_index(), x='Role', y='Monthly Salary'), use_container_width=True)
-            
-            # Table
-            with st.expander("📋 Details", expanded=True):
-                st.markdown(f"<div class='table-header'><span>📄 {cur}</span><span class='table-shape'>{filtered.shape[0]} rows × {filtered.shape[1]} cols</span></div>", unsafe_allow_html=True)
-                st.dataframe(filtered, use_container_width=True, hide_index=True)
+            # Secondary Scorecards
+            if not filtered.empty:
+                st.markdown('<div class="secondary-scorecards">', unsafe_allow_html=True)
+                st.markdown("##### 📊 Filtered View Metrics")
+                
+                if current == 'PROJECT_MASTER':
+                    cols = st.columns(4)
+                    with cols[0]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered)}</div><div class='scorecard-label'>Projects</div></div>", unsafe_allow_html=True)
+                    with cols[1]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>${filtered['Budget'].sum():,.0f}</div><div class='scorecard-label'>Total Budget</div></div>" if 'Budget' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Budget</div></div>", unsafe_allow_html=True)
+                    with cols[2]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered[filtered['Status']=='Active'])}</div><div class='scorecard-label'>Active</div></div>" if 'Status' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Active</div></div>", unsafe_allow_html=True)
+                    with cols[3]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Company name'].nunique()}</div><div class='scorecard-label'>Companies</div></div>" if 'Company name' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Companies</div></div>", unsafe_allow_html=True)
+                
+                elif current == 'TASK_PLAN':
+                    cols = st.columns(4)
+                    with cols[0]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered)}</div><div class='scorecard-label'>Tasks</div></div>", unsafe_allow_html=True)
+                    with cols[1]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered[filtered['Status']=='Done'])}</div><div class='scorecard-label'>Completed</div></div>" if 'Status' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Completed</div></div>", unsafe_allow_html=True)
+                    with cols[2]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered[filtered['Priority']=='High'])}</div><div class='scorecard-label'>High Priority</div></div>" if 'Priority' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>High Priority</div></div>", unsafe_allow_html=True)
+                    with cols[3]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Owner (Team / Client)'].nunique()}</div><div class='scorecard-label'>Owners</div></div>" if 'Owner (Team / Client)' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Owners</div></div>", unsafe_allow_html=True)
+                
+                elif current == 'DAILY_WORK_LOG':
+                    cols = st.columns(4)
+                    with cols[0]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered)}</div><div class='scorecard-label'>Entries</div></div>", unsafe_allow_html=True)
+                    with cols[1]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Hours Worked'].sum():.1f}</div><div class='scorecard-label'>Total Hours</div></div>" if 'Hours Worked' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Hours</div></div>", unsafe_allow_html=True)
+                    with cols[2]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Hours Worked'].mean():.1f}</div><div class='scorecard-label'>Avg Hours</div></div>" if 'Hours Worked' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Avg Hours</div></div>", unsafe_allow_html=True)
+                    with cols[3]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Employee Name'].nunique()}</div><div class='scorecard-label'>Employees</div></div>" if 'Employee Name' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Employees</div></div>", unsafe_allow_html=True)
+                
+                elif current == 'EMPLOYEE_COST':
+                    cols = st.columns(4)
+                    with cols[0]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered)}</div><div class='scorecard-label'>Employees</div></div>", unsafe_allow_html=True)
+                    with cols[1]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>${filtered['Monthly Salary'].sum():,.0f}</div><div class='scorecard-label'>Total Salary</div></div>" if 'Monthly Salary' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>$0</div><div class='scorecard-label'>Salary</div></div>", unsafe_allow_html=True)
+                    with cols[2]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>${filtered['Monthly Salary'].mean():,.0f}</div><div class='scorecard-label'>Avg Salary</div></div>" if 'Monthly Salary' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>$0</div><div class='scorecard-label'>Avg Salary</div></div>", unsafe_allow_html=True)
+                    with cols[3]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Role'].nunique()}</div><div class='scorecard-label'>Roles</div></div>" if 'Role' in filtered.columns else "<div class='scorecard'><div class='scorecard-value'>0</div><div class='scorecard-label'>Roles</div></div>", unsafe_allow_html=True)
+                
+                elif current == 'RESOURCE_LINKS':
+                    cols = st.columns(3)
+                    with cols[0]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{len(filtered)}</div><div class='scorecard-label'>Resources</div></div>", unsafe_allow_html=True)
+                    with cols[1]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Type'].nunique() if 'Type' in filtered.columns else 0}</div><div class='scorecard-label'>Types</div></div>", unsafe_allow_html=True)
+                    with cols[2]: st.markdown(f"<div class='scorecard'><div class='scorecard-value'>{filtered['Category'].nunique() if 'Category' in filtered.columns else 0}</div><div class='scorecard-label'>Categories</div></div>", unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Charts
+                if current == 'PROJECT_MASTER' and 'Company name' in filtered.columns and 'Budget' in filtered.columns:
+                    fig = px.bar(filtered.groupby('Company name')['Budget'].sum().reset_index(), x='Company name', y='Budget', title="Budget by Company", color_discrete_sequence=['#667eea'])
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                elif current == 'TASK_PLAN' and 'Owner (Team / Client)' in filtered.columns:
+                    fig = px.pie(filtered['Owner (Team / Client)'].value_counts().reset_index(), values='count', names='Owner (Team / Client)', title="Tasks by Owner", color_discrete_sequence=px.colors.sequential.Viridis)
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                elif current == 'DAILY_WORK_LOG' and 'Employee Name' in filtered.columns and 'Hours Worked' in filtered.columns:
+                    fig = px.bar(filtered.groupby('Employee Name')['Hours Worked'].sum().reset_index(), x='Employee Name', y='Hours Worked', title="Hours by Employee", color_discrete_sequence=['#667eea'])
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                elif current == 'EMPLOYEE_COST' and 'Role' in filtered.columns and 'Monthly Salary' in filtered.columns:
+                    fig = px.bar(filtered.groupby('Role')['Monthly Salary'].sum().reset_index(), x='Role', y='Monthly Salary', title="Salary by Role", color_discrete_sequence=['#667eea'])
+                    fig.update_layout(height=300)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Data table with name and shape
+                with st.expander("📋 Details", expanded=True):
+                    st.markdown(f"""
+                    <div class="table-header">
+                        <span class="table-name">📄 {current.replace('_', ' ').title()}</span>
+                        <span class="table-shape">{filtered.shape[0]} rows × {filtered.shape[1]} columns</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.dataframe(filtered, use_container_width=True, hide_index=True)
+        else:
+            st.info("📭 No data available")
 
-st.markdown(f'<meta http-equiv="refresh" content="{REFRESH_INTERVAL}"><hr><div style="text-align:center;color:#999">Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>', unsafe_allow_html=True)
+# --- Auto-refresh and Footer ---
+st.markdown(f'<meta http-equiv="refresh" content="{REFRESH_INTERVAL}">', unsafe_allow_html=True)
+st.markdown("---")
+st.markdown(f"<div style='text-align: center; color: #999; font-size: 0.8rem;'>Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>", unsafe_allow_html=True)
