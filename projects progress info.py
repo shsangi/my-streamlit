@@ -2,19 +2,28 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import time
 
 # --- Page Configuration ---
 st.set_page_config(layout="wide", page_title="Dynamic Project Dashboard")
 st.title("📊 Vertical Tab Dashboard with Dynamic Content Panels")
 
-# --- Data Loading Function (Cached for Performance) ---
-@st.cache_data
+# --- Initialize session state for last update time ---
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = None
+if 'data_sheets' not in st.session_state:
+    st.session_state.data_sheets = None
+
+# --- Auto-refresh configuration ---
+REFRESH_INTERVAL = 5  # seconds
+
+# --- Data Loading Function ---
+@st.cache_data(ttl=REFRESH_INTERVAL)  # Cache expires after refresh interval
 def load_data_from_gsheet():
     """Loads data from the published Google Sheet Excel URL."""
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrcJFa6eyrMeyc25Aqm_dLgfpuEBr0WCdc4OTKKZVK2Y6IfOoPdQFbYmSdrSYP/pub?output=xlsx"
     try:
         # Load all sheets from the Excel file
-        # Note: Sheet names must match exactly or be updated here
         xl = pd.ExcelFile(url)
         sheets = {
             'PROJECT_MASTER': pd.read_excel(xl, 'PROJECT_MASTER'),
@@ -30,17 +39,30 @@ def load_data_from_gsheet():
                     try:
                         df[col] = pd.to_datetime(df[col], errors='coerce')
                     except: pass
-        st.success("Data loaded successfully!")
+        
+        # Update last refresh timestamp in session state
+        st.session_state.last_update = datetime.now()
         return sheets
     except Exception as e:
         st.error(f"Error loading data: {e}. Please check the URL and sheet names.")
         # Return empty dataframes as fallback
         return {name: pd.DataFrame() for name in ['PROJECT_MASTER', 'DAILY_WORK_LOG', 'EMPLOYEE_COST', 'RESOURCE_LINKS', 'TASK_PLAN']}
 
-# --- Load Data ---
+# --- Load Data with Auto-refresh ---
+# Force refresh based on time
+current_time = time.time()
+if 'last_refresh_time' not in st.session_state:
+    st.session_state.last_refresh_time = current_time
+
+# Check if it's time to refresh
+if current_time - st.session_state.last_refresh_time >= REFRESH_INTERVAL:
+    st.cache_data.clear()  # Clear cache to force refresh
+    st.session_state.last_refresh_time = current_time
+
+# Load data
 data_sheets = load_data_from_gsheet()
 
-# --- Custom CSS for Vertical Tabs Look ---
+# --- Custom CSS for Vertical Tabs Look and Timestamp ---
 st.markdown("""
 <style>
     .stButton > button {
@@ -69,8 +91,37 @@ st.markdown("""
     h3 {
         margin-bottom: 5px;
     }
+    .refresh-timestamp {
+        color: #666;
+        font-size: 0.9em;
+        padding: 10px;
+        background-color: #f0f2f6;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        text-align: center;
+    }
+    .auto-refresh-indicator {
+        color: #4CAF50;
+        font-size: 0.8em;
+        margin-left: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# --- Auto-refresh message and timestamp ---
+if st.session_state.last_update:
+    timestamp_str = st.session_state.last_update.strftime("%Y-%m-%d %H:%M:%S")
+    st.markdown(f"""
+    <div class="refresh-timestamp">
+        🔄 Data last refreshed: {timestamp_str} 
+        <span class="auto-refresh-indicator">⏱️ Auto-refreshing every {REFRESH_INTERVAL} seconds</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Show success message on initial load or refresh
+    if 'last_shown_time' not in st.session_state or st.session_state.last_shown_time != st.session_state.last_update:
+        st.success(f"✅ Data loaded successfully at {timestamp_str}")
+        st.session_state.last_shown_time = st.session_state.last_update
 
 # --- Create Two Main Columns: Left for Icons, Right for Content ---
 left_col, right_col = st.columns([1, 5])
@@ -115,23 +166,23 @@ with right_col:
             with col1:
                 if 'Company name' in df.columns:
                     companies = ['All'] + list(df['Company name'].unique())
-                    selected_company = st.selectbox('Filter by Company', companies)
+                    selected_company = st.selectbox('Filter by Company', companies, key='proj_company')
             with col2:
                 if 'Quarter' in df.columns:
                     quarters = ['All'] + list(df['Quarter'].unique())
-                    selected_quarter = st.selectbox('Filter by Quarter', quarters)
+                    selected_quarter = st.selectbox('Filter by Quarter', quarters, key='proj_quarter')
             with col3:
                 if 'Status' in df.columns:
                     statuses = ['All'] + list(df['Status'].unique())
-                    selected_status = st.selectbox('Filter by Status', statuses)
+                    selected_status = st.selectbox('Filter by Status', statuses, key='proj_status')
 
             # Apply filters
             filtered_df = df.copy()
-            if selected_company != 'All':
+            if 'selected_company' in locals() and selected_company != 'All':
                 filtered_df = filtered_df[filtered_df['Company name'] == selected_company]
-            if selected_quarter != 'All':
+            if 'selected_quarter' in locals() and selected_quarter != 'All':
                 filtered_df = filtered_df[filtered_df['Quarter'] == selected_quarter]
-            if selected_status != 'All':
+            if 'selected_status' in locals() and selected_status != 'All':
                 filtered_df = filtered_df[filtered_df['Status'] == selected_status]
 
             # Scorecards
@@ -174,16 +225,16 @@ with right_col:
             with col1:
                 if 'Employee Name' in df.columns:
                     employees = ['All'] + list(df['Employee Name'].unique())
-                    selected_emp = st.selectbox('Filter by Employee', employees)
+                    selected_emp = st.selectbox('Filter by Employee', employees, key='work_emp')
             with col2:
                 if 'Date' in df.columns:
                     min_date = df['Date'].min().date() if pd.notna(df['Date'].min()) else datetime.today().date()
                     max_date = df['Date'].max().date() if pd.notna(df['Date'].max()) else datetime.today().date()
-                    date_range = st.date_input("Date Range", [min_date, max_date])
+                    date_range = st.date_input("Date Range", [min_date, max_date], key='work_date')
 
             # Apply filters (simplified)
             filtered_df = df.copy()
-            if selected_emp != 'All':
+            if 'selected_emp' in locals() and selected_emp != 'All':
                 filtered_df = filtered_df[filtered_df['Employee Name'] == selected_emp]
 
             # Scorecards
@@ -231,7 +282,6 @@ with right_col:
         if not df.empty:
             st.subheader("Resource Links & Project Info")
             # Display as a table with clickable links if possible
-            # For display purposes, just show the dataframe
             st.info("Tip: You can click on links in the table if they are properly formatted as URLs.")
             st.dataframe(df, use_container_width=True, hide_index=True)
         else:
@@ -248,17 +298,17 @@ with right_col:
             with col1:
                 if 'Priority' in df.columns:
                     priorities = ['All'] + list(df['Priority'].unique())
-                    selected_priority = st.selectbox('Filter by Priority', priorities)
+                    selected_priority = st.selectbox('Filter by Priority', priorities, key='task_priority')
             with col2:
                 if 'Status' in df.columns:
                     statuses = ['All'] + list(df['Status'].unique())
-                    selected_status = st.selectbox('Filter by Status', statuses)
+                    selected_status = st.selectbox('Filter by Status', statuses, key='task_status')
 
             # Apply filters
             filtered_df = df.copy()
-            if selected_priority != 'All':
+            if 'selected_priority' in locals() and selected_priority != 'All':
                 filtered_df = filtered_df[filtered_df['Priority'] == selected_priority]
-            if selected_status != 'All':
+            if 'selected_status' in locals() and selected_status != 'All':
                 filtered_df = filtered_df[filtered_df['Status'] == selected_status]
 
             # Scorecards
@@ -287,6 +337,18 @@ with right_col:
         else:
             st.warning("TASK_PLAN data is empty or could not be loaded.")
 
-# --- Optional: Footer ---
+# --- Add auto-refresh meta tag and JavaScript for client-side refresh ---
+st.markdown(f"""
+    <meta http-equiv="refresh" content="{REFRESH_INTERVAL}" />
+    <script>
+        // Optional: Add visual indicator that page will refresh
+        setTimeout(function() {{
+            console.log('Page will refresh in {REFRESH_INTERVAL} seconds');
+        }}, 1000);
+    </script>
+""", unsafe_allow_html=True)
+
+# --- Footer with current time ---
 st.divider()
-st.caption("Dynamic Dashboard - Data updates automatically from Google Sheet.")
+current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+st.caption(f"Dynamic Dashboard - Auto-refreshes every {REFRESH_INTERVAL} seconds | Page rendered: {current_time}")
