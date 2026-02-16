@@ -67,6 +67,7 @@ st.markdown("""
     .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
     .table-name { font-weight: 600; color: #2d3748; font-size: 1rem; }
     .table-shape { background: #e2e8f0; padding: 0.2rem 0.8rem; border-radius: 15px; font-size: 0.8rem; color: #4a5568; }
+    .no-filters-msg { background: #e2e8f0; padding: 0.5rem 1rem; border-radius: 10px; color: #4a5568; font-size: 0.9rem; text-align: center; }
     #MainMenu, footer, .stDeployButton { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
@@ -126,6 +127,13 @@ if st.session_state.show_original:
     tabs = st.tabs(list(st.session_state.data_sheets.keys()))
     for i, (sheet_name, df) in enumerate(st.session_state.data_sheets.items()):
         with tabs[i]:
+            # Table header with shape for original sheets
+            st.markdown(f"""
+            <div class="table-header">
+                <span class="table-name">📄 {sheet_name.replace('_', ' ').title()}</span>
+                <span class="table-shape">{df.shape[0]} rows × {df.shape[1]} columns</span>
+            </div>
+            """, unsafe_allow_html=True)
             st.dataframe(df, use_container_width=True, hide_index=True)
             csv = df.to_csv(index=False).encode('utf-8')
             st.download_button(f"📥 Download {sheet_name}", csv, f"{sheet_name}.csv", "text/csv")
@@ -159,62 +167,72 @@ else:
         if st.session_state.data_sheets and not st.session_state.data_sheets[current].empty:
             df = st.session_state.data_sheets[current].copy()
             
-            # Filters and Reset Button
-            with st.expander("🔍 Filters", expanded=True):
-                cols = st.columns([3, 1])
-                with cols[0]:
-                    if current == 'PROJECT_MASTER':
-                        filter_cols = st.columns(3)
-                        with filter_cols[0]:
-                            companies = ['All'] + list(df['Company name'].unique()) if 'Company name' in df.columns else ['All']
-                            st.session_state.filters['company'] = st.selectbox('Company', companies, index=0, key='f_comp')
-                        with filter_cols[1]:
-                            statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                            st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
-                        with filter_cols[2]:
-                            quarters = ['All'] + list(df['Quarter'].unique()) if 'Quarter' in df.columns else ['All']
-                            st.session_state.filters['quarter'] = st.selectbox('Quarter', quarters, index=0, key='f_quart')
-                    
-                    elif current == 'TASK_PLAN':
-                        filter_cols = st.columns(3)
-                        with filter_cols[0]:
-                            priorities = ['All'] + list(df['Priority'].unique()) if 'Priority' in df.columns else ['All']
-                            st.session_state.filters['priority'] = st.selectbox('Priority', priorities, index=0, key='f_pri')
-                        with filter_cols[1]:
-                            statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
-                            st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
-                        with filter_cols[2]:
-                            owners = ['All'] + list(df['Owner (Team / Client)'].unique()) if 'Owner (Team / Client)' in df.columns else ['All']
-                            st.session_state.filters['owner'] = st.selectbox('Owner', owners, index=0, key='f_own')
-                    
-                    elif current == 'DAILY_WORK_LOG':
-                        employees = ['All'] + list(df['Employee Name'].unique()) if 'Employee Name' in df.columns else ['All']
-                        st.session_state.filters['employee'] = st.selectbox('Employee', employees, index=0, key='f_emp')
-                    
-                    elif current == 'EMPLOYEE_COST':
-                        roles = ['All'] + list(df['Role'].unique()) if 'Role' in df.columns else ['All']
-                        st.session_state.filters['role'] = st.selectbox('Role', roles, index=0, key='f_role')
-                
-                with cols[1]:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🔄 Reset All Filters", use_container_width=True, type="primary"):
-                        st.session_state.filters = {}
-                        st.rerun()
+            # Drop NaN values from filter columns
+            for col in df.columns:
+                if df[col].dtype == 'object':  # Only for string columns
+                    df[col] = df[col].fillna('Unknown')
             
-            # Apply filters
+            # Filters and Reset Button - Skip for RESOURCE_LINKS
+            if current != 'RESOURCE_LINKS':
+                with st.expander("🔍 Filters", expanded=True):
+                    cols = st.columns([3, 1])
+                    with cols[0]:
+                        if current == 'PROJECT_MASTER':
+                            filter_cols = st.columns(3)
+                            with filter_cols[0]:
+                                companies = ['All'] + sorted([x for x in df['Company name'].unique() if x != 'Unknown']) if 'Company name' in df.columns else ['All']
+                                st.session_state.filters['company'] = st.selectbox('Company', companies, index=0, key='f_comp')
+                            with filter_cols[1]:
+                                statuses = ['All'] + sorted([x for x in df['Status'].unique() if x != 'Unknown']) if 'Status' in df.columns else ['All']
+                                st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
+                            with filter_cols[2]:
+                                quarters = ['All'] + sorted([x for x in df['Quarter'].unique() if x != 'Unknown']) if 'Quarter' in df.columns else ['All']
+                                st.session_state.filters['quarter'] = st.selectbox('Quarter', quarters, index=0, key='f_quart')
+                        
+                        elif current == 'TASK_PLAN':
+                            filter_cols = st.columns(3)
+                            with filter_cols[0]:
+                                priorities = ['All'] + sorted([x for x in df['Priority'].unique() if x != 'Unknown']) if 'Priority' in df.columns else ['All']
+                                st.session_state.filters['priority'] = st.selectbox('Priority', priorities, index=0, key='f_pri')
+                            with filter_cols[1]:
+                                statuses = ['All'] + sorted([x for x in df['Status'].unique() if x != 'Unknown']) if 'Status' in df.columns else ['All']
+                                st.session_state.filters['status'] = st.selectbox('Status', statuses, index=0, key='f_stat')
+                            with filter_cols[2]:
+                                owners = ['All'] + sorted([x for x in df['Owner (Team / Client)'].unique() if x != 'Unknown']) if 'Owner (Team / Client)' in df.columns else ['All']
+                                st.session_state.filters['owner'] = st.selectbox('Owner', owners, index=0, key='f_own')
+                        
+                        elif current == 'DAILY_WORK_LOG':
+                            employees = ['All'] + sorted([x for x in df['Employee Name'].unique() if x != 'Unknown']) if 'Employee Name' in df.columns else ['All']
+                            st.session_state.filters['employee'] = st.selectbox('Employee', employees, index=0, key='f_emp')
+                        
+                        elif current == 'EMPLOYEE_COST':
+                            roles = ['All'] + sorted([x for x in df['Role'].unique() if x != 'Unknown']) if 'Role' in df.columns else ['All']
+                            st.session_state.filters['role'] = st.selectbox('Role', roles, index=0, key='f_role')
+                    
+                    with cols[1]:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("🔄 Reset All Filters", use_container_width=True, type="primary"):
+                            st.session_state.filters = {}
+                            st.rerun()
+            else:
+                # Message for Resource Links (no filters)
+                st.markdown('<div class="no-filters-msg">🔗 Resource Links View - No filters available</div>', unsafe_allow_html=True)
+            
+            # Apply filters (skip for RESOURCE_LINKS)
             filtered = df.copy()
-            if current == 'PROJECT_MASTER':
-                if st.session_state.filters.get('company', 'All') != 'All': filtered = filtered[filtered['Company name'] == st.session_state.filters['company']]
-                if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
-                if st.session_state.filters.get('quarter', 'All') != 'All': filtered = filtered[filtered['Quarter'] == st.session_state.filters['quarter']]
-            elif current == 'TASK_PLAN':
-                if st.session_state.filters.get('priority', 'All') != 'All': filtered = filtered[filtered['Priority'] == st.session_state.filters['priority']]
-                if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
-                if st.session_state.filters.get('owner', 'All') != 'All': filtered = filtered[filtered['Owner (Team / Client)'] == st.session_state.filters['owner']]
-            elif current == 'DAILY_WORK_LOG' and st.session_state.filters.get('employee', 'All') != 'All':
-                filtered = filtered[filtered['Employee Name'] == st.session_state.filters['employee']]
-            elif current == 'EMPLOYEE_COST' and st.session_state.filters.get('role', 'All') != 'All':
-                filtered = filtered[filtered['Role'] == st.session_state.filters['role']]
+            if current != 'RESOURCE_LINKS':
+                if current == 'PROJECT_MASTER':
+                    if st.session_state.filters.get('company', 'All') != 'All': filtered = filtered[filtered['Company name'] == st.session_state.filters['company']]
+                    if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
+                    if st.session_state.filters.get('quarter', 'All') != 'All': filtered = filtered[filtered['Quarter'] == st.session_state.filters['quarter']]
+                elif current == 'TASK_PLAN':
+                    if st.session_state.filters.get('priority', 'All') != 'All': filtered = filtered[filtered['Priority'] == st.session_state.filters['priority']]
+                    if st.session_state.filters.get('status', 'All') != 'All': filtered = filtered[filtered['Status'] == st.session_state.filters['status']]
+                    if st.session_state.filters.get('owner', 'All') != 'All': filtered = filtered[filtered['Owner (Team / Client)'] == st.session_state.filters['owner']]
+                elif current == 'DAILY_WORK_LOG' and st.session_state.filters.get('employee', 'All') != 'All':
+                    filtered = filtered[filtered['Employee Name'] == st.session_state.filters['employee']]
+                elif current == 'EMPLOYEE_COST' and st.session_state.filters.get('role', 'All') != 'All':
+                    filtered = filtered[filtered['Role'] == st.session_state.filters['role']]
             
             # Secondary Scorecards
             if not filtered.empty:
