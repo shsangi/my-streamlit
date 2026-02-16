@@ -1,3 +1,50 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+import pytz
+
+# --- Page Configuration ---
+st.set_page_config(layout="wide", page_title="Project Pulse", page_icon="📊", initial_sidebar_state="collapsed")
+
+# --- Constants ---
+REFRESH_INTERVAL = 5
+PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
+DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrcJFa6eyrMeyc25Aqm_dLgfpuEBr0WCdc4OTKKZVK2Y6IfOoPdQFbYmSdrSYP/pub?output=xlsx"
+
+# --- Initialize Session State ---
+for key in ['selected_tab', 'last_update', 'data_sheets', 'show_original', 'filters']:
+    if key not in st.session_state:
+        if key == 'selected_tab':
+            st.session_state[key] = 'PROJECT_MASTER'
+        elif key == 'filters':
+            st.session_state[key] = {}
+        else:
+            st.session_state[key] = None if key != 'show_original' else False
+
+# --- Data Loading Function ---
+@st.cache_data(ttl=REFRESH_INTERVAL)
+def load_data():
+    try:
+        xl = pd.ExcelFile(DATA_URL)
+        sheets = {
+            'PROJECT_MASTER': pd.read_excel(xl, 'PROJECT_MASTER'),
+            'DAILY_WORK_LOG': pd.read_excel(xl, 'DAILY_WORK_LOG'),
+            'EMPLOYEE_COST': pd.read_excel(xl, 'EMPLOYEE_COST'),
+            'RESOURCE_LINKS': pd.read_excel(xl, 'RESOURCE_LINKS'),
+            'TASK_PLAN': pd.read_excel(xl, 'TASK PLAN + RESPONSIBILITY')
+        }
+        return sheets, datetime.now(PAKISTAN_TZ)
+    except Exception as e:
+        st.error(f"⚠️ Data load failed: {str(e)}")
+        return {name: pd.DataFrame() for name in ['PROJECT_MASTER', 'DAILY_WORK_LOG', 'EMPLOYEE_COST', 'RESOURCE_LINKS', 'TASK_PLAN']}, None
+
+# --- Load Data ---
+data_sheets, last_update = load_data()
+if last_update:
+    st.session_state.last_update = last_update
+    st.session_state.data_sheets = data_sheets
+
 # --- Custom CSS with mobile-responsive header ---
 st.markdown("""
 <style>
@@ -274,3 +321,20 @@ if st.session_state.data_sheets and not st.session_state.show_original:
         </div>
     </div>
     """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div class="header-container">
+        <div class="header-content">
+            <div class="header-title-section">
+                <h1 class="header-title">📊 Project Pulse</h1>
+                <div class="header-subtitle">Original Sheets View</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- Rest of your existing code continues here ---
+# (Add the rest of your main layout code here)
+
+st.markdown("---")
+st.markdown(f"<div style='text-align: center; color: #999; font-size: 0.8rem;'>Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>", unsafe_allow_html=True)
