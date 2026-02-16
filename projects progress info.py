@@ -8,7 +8,7 @@ import time
 # --- Page Configuration ---
 st.set_page_config(
     layout="wide",
-    page_title="Project Pulse • Live Dashboard",
+    page_title="Project Pulse",
     page_icon="📊",
     initial_sidebar_state="collapsed"
 )
@@ -510,3 +510,4 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
