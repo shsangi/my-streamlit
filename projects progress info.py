@@ -312,7 +312,6 @@ if st.session_state.data_sheets and not st.session_state.show_original:
             <div class="header-status">
                 
                 
-            </div>
             <div class="header-scorecards">
                 <div class="header-scorecard">
                     <div class="header-scorecard-value">{total_projects}</div>
@@ -538,4 +537,5 @@ st.markdown(
     f"Project Pulse • Auto-refreshes every {REFRESH_INTERVAL}s</div>",
     unsafe_allow_html=True
 )
+
 
