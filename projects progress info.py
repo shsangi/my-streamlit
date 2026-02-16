@@ -2,405 +2,332 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import time
 import pytz
+from streamlit_autorefresh import st_autorefresh
 
 # --- Page Configuration ---
-st.set_page_config(layout="wide", page_title="Dynamic Project Dashboard")
-st.title("📊 Vertical Tab Dashboard with Dynamic Content Panels")
+st.set_page_config(
+    layout="wide",
+    page_title="Project Pulse • Live Dashboard",
+    page_icon="📊",
+    initial_sidebar_state="collapsed"
+)
 
-# --- Initialize session state for last update time ---
-if 'last_update' not in st.session_state:
-    st.session_state.last_update = None
-if 'data_sheets' not in st.session_state:
-    st.session_state.data_sheets = None
-
-# --- Auto-refresh configuration ---
+# --- Constants ---
 REFRESH_INTERVAL = 5  # seconds
-
-# --- Pakistan Timezone ---
 PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
+DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrcJFa6eyrMeyc25Aqm_dLgfpuEBr0WCdc4OTKKZVK2Y6IfOoPdQFbYmSdrSYP/pub?output=xlsx"
 
-def get_pakistan_time():
-    """Returns current time in Pakistan timezone"""
-    return datetime.now(PAKISTAN_TZ)
+# --- Initialize Session State ---
+if 'selected_tab' not in st.session_state:
+    st.session_state.selected_tab = 'PROJECT_MASTER'
 
-def format_pakistan_time(dt):
-    """Format datetime in Pakistan timezone with specified format"""
-    if dt is None:
-        return "Never"
-    if dt.tzinfo is None:
-        # If naive datetime, assume it's in Pakistan time
-        dt = PAKISTAN_TZ.localize(dt)
-    return dt.strftime("%a, %d %b, %Y, %I:%M:%S %p")
+# --- Auto-refresh ---
+count = st_autorefresh(interval=REFRESH_INTERVAL * 1000, key="auto_refresh")
 
 # --- Data Loading Function ---
-@st.cache_data(ttl=REFRESH_INTERVAL)  # Cache expires after refresh interval
-def load_data_from_gsheet():
-    """Loads data from the published Google Sheet Excel URL."""
-    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQFttuVQlH84hCC-brrcJFa6eyrMeyc25Aqm_dLgfpuEBr0WCdc4OTKKZVK2Y6IfOoPdQFbYmSdrSYP/pub?output=xlsx"
+@st.cache_data(ttl=REFRESH_INTERVAL)
+def load_data():
+    """Load data from Google Sheets"""
     try:
-        # Load all sheets from the Excel file
-        xl = pd.ExcelFile(url)
+        xl = pd.ExcelFile(DATA_URL)
         sheets = {
             'PROJECT_MASTER': pd.read_excel(xl, 'PROJECT_MASTER'),
             'DAILY_WORK_LOG': pd.read_excel(xl, 'DAILY_WORK_LOG'),
             'EMPLOYEE_COST': pd.read_excel(xl, 'EMPLOYEE_COST'),
             'RESOURCE_LINKS': pd.read_excel(xl, 'RESOURCE_LINKS'),
-            'TASK_PLAN': pd.read_excel(xl, 'TASK PLAN + RESPONSIBILITY') # Adjust sheet name if needed
+            'TASK_PLAN': pd.read_excel(xl, 'TASK PLAN + RESPONSIBILITY')
         }
-        # Basic data cleaning: Convert date columns, fill NaNs
-        for name, df in sheets.items():
-            for col in df.columns:
-                if 'Date' in col or 'date' in col or 'Start' in col or 'End' in col:
-                    try:
-                        df[col] = pd.to_datetime(df[col], errors='coerce')
-                    except: pass
         
-        # Update last refresh timestamp in session state with Pakistan time
-        st.session_state.last_update = get_pakistan_time()
-        return sheets
+        # Clean date columns
+        for df in sheets.values():
+            for col in df.select_dtypes(include=['object']):
+                if 'date' in col.lower() or 'time' in col.lower():
+                    df[col] = pd.to_datetime(df[col], errors='coerce')
+        
+        return sheets, datetime.now(PAKISTAN_TZ)
     except Exception as e:
-        st.error(f"Error loading data: {e}. Please check the URL and sheet names.")
-        # Return empty dataframes as fallback
-        return {name: pd.DataFrame() for name in ['PROJECT_MASTER', 'DAILY_WORK_LOG', 'EMPLOYEE_COST', 'RESOURCE_LINKS', 'TASK_PLAN']}
+        st.error(f"⚠️ Data load failed: {str(e)}")
+        return {name: pd.DataFrame() for name in ['PROJECT_MASTER', 'DAILY_WORK_LOG', 'EMPLOYEE_COST', 'RESOURCE_LINKS', 'TASK_PLAN']}, None
 
-# --- Load Data with Auto-refresh ---
-# Force refresh based on time
-current_time = time.time()
-if 'last_refresh_time' not in st.session_state:
-    st.session_state.last_refresh_time = current_time
+# --- Load Data ---
+data_sheets, last_update = load_data()
 
-# Check if it's time to refresh
-if current_time - st.session_state.last_refresh_time >= REFRESH_INTERVAL:
-    st.cache_data.clear()  # Clear cache to force refresh
-    st.session_state.last_refresh_time = current_time
-
-# Load data
-data_sheets = load_data_from_gsheet()
-
-# --- Custom CSS for Vertical Tabs Look and Timestamp ---
+# --- Custom CSS for Modern Look ---
 st.markdown("""
 <style>
-    .stButton > button {
+    /* Modern gradient header */
+    .header-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem 2rem;
+        border-radius: 20px;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    /* Status bar */
+    .status-bar {
+        background: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+    }
+    
+    .live-badge {
+        background: #ff4444;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
+    
+    .timestamp {
+        color: #666;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .pk-badge {
+        background: #2c3e50;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    /* Modern tabs */
+    .tab-container {
+        background: white;
+        border-radius: 15px;
+        padding: 0.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-bottom: 2rem;
+    }
+    
+    .tab-button {
+        padding: 0.75rem 1.5rem;
+        border-radius: 10px;
+        border: none;
+        background: transparent;
+        font-weight: 500;
+        color: #666;
+        transition: all 0.2s;
+        cursor: pointer;
         width: 100%;
         text-align: left;
-        background-color: transparent;
-        border: none;
-        padding: 10px 15px;
-        border-radius: 5px;
+        margin: 2px 0;
     }
-    .stButton > button:hover {
-        background-color: #f0f2f6;
-        border: none;
+    
+    .tab-button:hover {
+        background: #f8f9fa;
+        color: #667eea;
     }
-    .stButton > button:focus {
-        background-color: #e0e3e9;
-        border: none;
-        box-shadow: none;
-        outline: 2px solid #4e8cff;
-    }
-    div[data-testid="column"]:first-child {
-        background-color: #f9f9f9;
-        padding: 20px 10px;
-        border-radius: 10px;
-    }
-    h3 {
-        margin-bottom: 5px;
-    }
-    .refresh-timestamp {
-        color: #666;
-        font-size: 0.9em;
-        padding: 10px;
-        background-color: #f0f2f6;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        text-align: center;
-        border-left: 4px solid #4CAF50;
-    }
-    .auto-refresh-indicator {
-        color: #4CAF50;
-        font-size: 0.8em;
-        margin-left: 10px;
-        background-color: #e8f5e9;
-        padding: 2px 8px;
-        border-radius: 12px;
-    }
-    .pakistan-time-badge {
-        background-color: #2196F3;
+    
+    .tab-button.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 2px 8px;
-        border-radius: 12px;
-        font-size: 0.8em;
-        margin-left: 10px;
     }
-    .success-message {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        border-left: 4px solid #28a745;
+    
+    /* Metric cards */
+    .metric-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        border: 1px solid #f0f0f0;
+        transition: transform 0.2s;
     }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {display: none;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Auto-refresh message and timestamp ---
-if st.session_state.last_update:
-    timestamp_str = format_pakistan_time(st.session_state.last_update)
-    st.markdown(f"""
-    <div class="refresh-timestamp">
-        <span style="font-size: 1.1em;">🔄 Data last refreshed:</span> 
-        <strong>{timestamp_str}</strong> (Pakistan Time)
-        <span class="auto-refresh-indicator">⏱️ Every {REFRESH_INTERVAL}s</span>
-        <span class="pakistan-time-badge">🇵🇰 PKT</span>
+# --- Header ---
+st.markdown("""
+<div class="header-container">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+        <h1 style="margin: 0; font-size: 2rem;">📊 Project Pulse</h1>
+        <span style="background: rgba(255,255,255,0.2); padding: 0.25rem 1rem; border-radius: 50px; font-size: 0.9rem;">
+            Live Dashboard
+        </span>
     </div>
-    """, unsafe_allow_html=True)
-    
-    # Show success message on initial load or refresh
-    if 'last_shown_time' not in st.session_state or st.session_state.last_shown_time != st.session_state.last_update:
-        st.markdown(f"""
-        <div class="success-message">
-            ✅ Data loaded successfully at {timestamp_str} (Pakistan Time)
-        </div>
-        """, unsafe_allow_html=True)
-        st.session_state.last_shown_time = st.session_state.last_update
-
-# --- Create Two Main Columns: Left for Icons, Right for Content ---
-left_col, right_col = st.columns([1, 5])
-
-# --- Left Column: Vertical Icon Tabs (Navigation) ---
-with left_col:
-    st.markdown("### Navigation")
-    st.divider()
-
-    # Use session state to track the selected tab
-    if 'selected_tab' not in st.session_state:
-        st.session_state.selected_tab = 'PROJECT_MASTER'
-
-    # Define icons and labels for tabs
-    tabs = {
-        'PROJECT_MASTER': ('📁', 'Project Master'),
-        'DAILY_WORK_LOG': ('📝', 'Daily Work Log'),
-        'EMPLOYEE_COST': ('💰', 'Employee Cost'),
-        'RESOURCE_LINKS': ('🔗', 'Resource Links'),
-        'TASK_PLAN': ('✅', 'Task Plan')
-    }
-
-    # Create buttons that act as tabs
-    for tab_key, (icon, label) in tabs.items():
-        button_label = f"{icon} {label}"
-        if st.button(button_label, key=f"btn_{tab_key}", use_container_width=True):
-            st.session_state.selected_tab = tab_key
-
-    st.divider()
-    st.caption("Dynamic Content Panels")
-    
-    # Show current Pakistan time in sidebar
-    current_pk_time = format_pakistan_time(get_pakistan_time())
-    st.markdown(f"""
-    <div style="text-align: center; margin-top: 20px; padding: 10px; background-color: #e3f2fd; border-radius: 5px;">
-        <small>🇵🇰 Current Pakistan Time</small><br>
-        <strong>{current_pk_time}</strong>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- Right Column: Dynamic Content Based on Selected Tab ---
-with right_col:
-    st.markdown(f"### {tabs[st.session_state.selected_tab][1]} Dashboard")
-
-    # --- Panel 1: PROJECT_MASTER ---
-    if st.session_state.selected_tab == 'PROJECT_MASTER':
-        df = data_sheets['PROJECT_MASTER']
-        if not df.empty:
-            # Filters Row
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if 'Company name' in df.columns:
-                    companies = ['All'] + list(df['Company name'].unique())
-                    selected_company = st.selectbox('Filter by Company', companies, key='proj_company')
-            with col2:
-                if 'Quarter' in df.columns:
-                    quarters = ['All'] + list(df['Quarter'].unique())
-                    selected_quarter = st.selectbox('Filter by Quarter', quarters, key='proj_quarter')
-            with col3:
-                if 'Status' in df.columns:
-                    statuses = ['All'] + list(df['Status'].unique())
-                    selected_status = st.selectbox('Filter by Status', statuses, key='proj_status')
-
-            # Apply filters
-            filtered_df = df.copy()
-            if 'selected_company' in locals() and selected_company != 'All':
-                filtered_df = filtered_df[filtered_df['Company name'] == selected_company]
-            if 'selected_quarter' in locals() and selected_quarter != 'All':
-                filtered_df = filtered_df[filtered_df['Quarter'] == selected_quarter]
-            if 'selected_status' in locals() and selected_status != 'All':
-                filtered_df = filtered_df[filtered_df['Status'] == selected_status]
-
-            # Scorecards
-            st.subheader("Key Metrics")
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            with mc1:
-                st.metric("Total Projects", len(filtered_df))
-            with mc2:
-                if 'Budget' in filtered_df.columns:
-                    total_budget = filtered_df['Budget'].sum()
-                    st.metric("Total Budget", f"${total_budget:,.0f}")
-            with mc3:
-                if 'Account Manager' in filtered_df.columns:
-                    unique_ams = filtered_df['Account Manager'].nunique()
-                    st.metric("Account Managers", unique_ams)
-            with mc4:
-                if 'Status' in filtered_df.columns:
-                    active_count = len(filtered_df[filtered_df['Status'] == 'Active'])
-                    st.metric("Active Projects", active_count)
-
-            # Graph
-            st.subheader("Budget by Company")
-            if 'Company name' in filtered_df.columns and 'Budget' in filtered_df.columns:
-                budget_by_company = filtered_df.groupby('Company name')['Budget'].sum().reset_index()
-                fig = px.bar(budget_by_company, x='Company name', y='Budget', title="Budget Distribution")
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Data Table
-            st.subheader("Project Master Data")
-            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
-        else:
-            st.warning("PROJECT_MASTER data is empty or could not be loaded.")
-
-    # --- Panel 2: DAILY_WORK_LOG ---
-    elif st.session_state.selected_tab == 'DAILY_WORK_LOG':
-        df = data_sheets['DAILY_WORK_LOG']
-        if not df.empty:
-            # Filters
-            col1, col2 = st.columns(2)
-            with col1:
-                if 'Employee Name' in df.columns:
-                    employees = ['All'] + list(df['Employee Name'].unique())
-                    selected_emp = st.selectbox('Filter by Employee', employees, key='work_emp')
-            with col2:
-                if 'Date' in df.columns:
-                    min_date = df['Date'].min().date() if pd.notna(df['Date'].min()) else datetime.today().date()
-                    max_date = df['Date'].max().date() if pd.notna(df['Date'].max()) else datetime.today().date()
-                    date_range = st.date_input("Date Range", [min_date, max_date], key='work_date')
-
-            # Apply filters (simplified)
-            filtered_df = df.copy()
-            if 'selected_emp' in locals() and selected_emp != 'All':
-                filtered_df = filtered_df[filtered_df['Employee Name'] == selected_emp]
-
-            # Scorecards
-            st.subheader("Work Log Summary")
-            sc1, sc2, sc3 = st.columns(3)
-            with sc1:
-                st.metric("Total Hours", f"{filtered_df['Hours Worked'].sum():.1f}")
-            with sc2:
-                total_cost = (filtered_df['Hours Worked'] * filtered_df['Employee Hourly Rate']).sum()
-                st.metric("Total Cost", f"${total_cost:,.0f}")
-            with sc3:
-                st.metric("Total Entries", len(filtered_df))
-
-            # Graph: Hours by Employee
-            if 'Employee Name' in filtered_df.columns and 'Hours Worked' in filtered_df.columns:
-                hours_by_emp = filtered_df.groupby('Employee Name')['Hours Worked'].sum().reset_index()
-                fig = px.pie(hours_by_emp, values='Hours Worked', names='Employee Name', title="Work Hours Distribution")
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Data Table
-            st.subheader("Daily Work Log Data")
-            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
-        else:
-            st.warning("DAILY_WORK_LOG data is empty or could not be loaded.")
-
-    # --- Panel 3: EMPLOYEE_COST ---
-    elif st.session_state.selected_tab == 'EMPLOYEE_COST':
-        df = data_sheets['EMPLOYEE_COST']
-        if not df.empty:
-            st.subheader("Employee Cost Overview")
-            # Simple table and bar chart
-            if not df.empty:
-                st.dataframe(df, use_container_width=True, hide_index=True)
-
-                if 'Role' in df.columns and 'Monthly Salary' in df.columns:
-                    cost_by_role = df.groupby('Role')['Monthly Salary'].sum().reset_index()
-                    fig = px.bar(cost_by_role, x='Role', y='Monthly Salary', title="Monthly Salary by Role")
-                    st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("EMPLOYEE_COST data is empty or could not be loaded.")
-
-    # --- Panel 4: RESOURCE_LINKS ---
-    elif st.session_state.selected_tab == 'RESOURCE_LINKS':
-        df = data_sheets['RESOURCE_LINKS']
-        if not df.empty:
-            st.subheader("Resource Links & Project Info")
-            # Display as a table with clickable links if possible
-            st.info("Tip: You can click on links in the table if they are properly formatted as URLs.")
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.warning("RESOURCE_LINKS data is empty or could not be loaded.")
-
-    # --- Panel 5: TASK PLAN + RESPONSIBILITY ---
-    elif st.session_state.selected_tab == 'TASK_PLAN':
-        df = data_sheets['TASK_PLAN']
-        if not df.empty:
-            st.subheader("Task Plan & Responsibility")
-
-            # Filters
-            col1, col2 = st.columns(2)
-            with col1:
-                if 'Priority' in df.columns:
-                    priorities = ['All'] + list(df['Priority'].unique())
-                    selected_priority = st.selectbox('Filter by Priority', priorities, key='task_priority')
-            with col2:
-                if 'Status' in df.columns:
-                    statuses = ['All'] + list(df['Status'].unique())
-                    selected_status = st.selectbox('Filter by Status', statuses, key='task_status')
-
-            # Apply filters
-            filtered_df = df.copy()
-            if 'selected_priority' in locals() and selected_priority != 'All':
-                filtered_df = filtered_df[filtered_df['Priority'] == selected_priority]
-            if 'selected_status' in locals() and selected_status != 'All':
-                filtered_df = filtered_df[filtered_df['Status'] == selected_status]
-
-            # Scorecards
-            sc1, sc2, sc3 = st.columns(3)
-            with sc1:
-                st.metric("Total Tasks", len(filtered_df))
-            with sc2:
-                if 'Status' in filtered_df.columns:
-                    pending = len(filtered_df[filtered_df['Status'] != 'Done'])
-                    st.metric("Pending Tasks", pending)
-            with sc3:
-                if 'Priority' in filtered_df.columns:
-                    high = len(filtered_df[filtered_df['Priority'] == 'High'])
-                    st.metric("High Priority", high)
-
-            # Graph: Tasks by Owner
-            if 'Owner (Team / Client)' in filtered_df.columns:
-                owner_count = filtered_df['Owner (Team / Client)'].value_counts().reset_index()
-                owner_count.columns = ['Owner', 'Count']
-                fig = px.pie(owner_count, values='Count', names='Owner', title="Tasks by Owner")
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Data Table
-            st.subheader("Task Details")
-            st.dataframe(filtered_df, use_container_width=True, hide_index=True)
-        else:
-            st.warning("TASK_PLAN data is empty or could not be loaded.")
-
-# --- Add auto-refresh meta tag and JavaScript for client-side refresh ---
-st.markdown(f"""
-    <meta http-equiv="refresh" content="{REFRESH_INTERVAL}" />
-    <script>
-        // Optional: Add visual indicator that page will refresh
-        setTimeout(function() {{
-            console.log('Page will refresh in {REFRESH_INTERVAL} seconds');
-        }}, 1000);
-    </script>
+    <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Real-time project analytics & tracking</p>
+</div>
 """, unsafe_allow_html=True)
 
-# --- Footer with Pakistan time ---
-st.divider()
-current_pk_time = format_pakistan_time(get_pakistan_time())
-st.caption(f"🇵🇰 Dynamic Dashboard - Auto-refreshes every {REFRESH_INTERVAL} seconds | Pakistan Time: {current_pk_time}")
+# --- Status Bar (Single, Clean) ---
+if last_update:
+    timestamp_str = last_update.strftime("%a, %d %b, %Y, %I:%M:%S %p")
+    st.markdown(f"""
+    <div class="status-bar">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <span class="live-badge">LIVE</span>
+            <span class="timestamp">
+                <span>🔄 Last updated: {timestamp_str}</span>
+                <span class="pk-badge">🇵🇰 PKT</span>
+            </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; color: #666;">
+            <span>⏱️ Auto-refresh: {REFRESH_INTERVAL}s</span>
+            <span style="color: #22c55e;">●</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# --- Main Layout ---
+col1, col2 = st.columns([1, 4])
+
+# --- Left Column: Navigation ---
+with col1:
+    st.markdown('<div class="tab-container">', unsafe_allow_html=True)
+    st.markdown("##### 📋 Navigation")
+    
+    tabs = {
+        'PROJECT_MASTER': ('📁', 'Projects'),
+        'DAILY_WORK_LOG': ('📝', 'Work Log'),
+        'EMPLOYEE_COST': ('💰', 'Costs'),
+        'RESOURCE_LINKS': ('🔗', 'Resources'),
+        'TASK_PLAN': ('✅', 'Tasks')
+    }
+    
+    for tab_key, (icon, label) in tabs.items():
+        active_class = "active" if st.session_state.selected_tab == tab_key else ""
+        if st.button(f"{icon} {label}", key=f"nav_{tab_key}", use_container_width=True):
+            st.session_state.selected_tab = tab_key
+        st.markdown(f'<style>div[data-testid="stButton"]:has(button[key="nav_{tab_key}"]) button {{background: {"linear-gradient(135deg, #667eea 0%, #764ba2 100%)" if st.session_state.selected_tab == tab_key else "transparent"}; color: {"white" if st.session_state.selected_tab == tab_key else "#666"};}}</style>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --- Right Column: Content ---
+with col2:
+    current_tab = st.session_state.selected_tab
+    st.markdown(f"### {tabs[current_tab][1]} Dashboard")
+    
+    df = data_sheets[current_tab]
+    
+    if df.empty:
+        st.warning("No data available")
+    else:
+        # Tab-specific content
+        if current_tab == 'PROJECT_MASTER':
+            # Filters in expander
+            with st.expander("🔍 Filters", expanded=False):
+                cols = st.columns(3)
+                with cols[0]:
+                    companies = ['All'] + list(df['Company name'].unique()) if 'Company name' in df.columns else ['All']
+                    company = st.selectbox('Company', companies, key='filter_company')
+                with cols[1]:
+                    statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
+                    status = st.selectbox('Status', statuses, key='filter_status')
+                with cols[2]:
+                    quarters = ['All'] + list(df['Quarter'].unique()) if 'Quarter' in df.columns else ['All']
+                    quarter = st.selectbox('Quarter', quarters, key='filter_quarter')
+            
+            # Filter data
+            filtered = df.copy()
+            if company != 'All': filtered = filtered[filtered['Company name'] == company]
+            if status != 'All': filtered = filtered[filtered['Status'] == status]
+            if quarter != 'All': filtered = filtered[filtered['Quarter'] == quarter]
+            
+            # Metrics row
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.metric("Total Projects", len(filtered))
+            with m2:
+                if 'Budget' in filtered.columns:
+                    st.metric("Total Budget", f"${filtered['Budget'].sum():,.0f}")
+            with m3:
+                if 'Account Manager' in filtered.columns:
+                    st.metric("Account Managers", filtered['Account Manager'].nunique())
+            with m4:
+                if 'Status' in filtered.columns:
+                    st.metric("Active", len(filtered[filtered['Status'] == 'Active']))
+            
+            # Charts
+            if 'Company name' in filtered.columns and 'Budget' in filtered.columns:
+                fig = px.bar(
+                    filtered.groupby('Company name')['Budget'].sum().reset_index(),
+                    x='Company name', y='Budget',
+                    title="Budget by Company",
+                    color_discrete_sequence=['#667eea']
+                )
+                fig.update_layout(plot_bgcolor='white', height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Data table
+            with st.expander("📋 View Details", expanded=True):
+                st.dataframe(filtered, use_container_width=True, hide_index=True)
+        
+        elif current_tab == 'TASK_PLAN':
+            # Similar concise layout for other tabs
+            with st.expander("🔍 Filters", expanded=False):
+                cols = st.columns(2)
+                with cols[0]:
+                    priorities = ['All'] + list(df['Priority'].unique()) if 'Priority' in df.columns else ['All']
+                    priority = st.selectbox('Priority', priorities)
+                with cols[1]:
+                    statuses = ['All'] + list(df['Status'].unique()) if 'Status' in df.columns else ['All']
+                    status = st.selectbox('Status', statuses)
+            
+            filtered = df.copy()
+            if priority != 'All': filtered = filtered[filtered['Priority'] == priority]
+            if status != 'All': filtered = filtered[filtered['Status'] == status]
+            
+            m1, m2, m3 = st.columns(3)
+            with m1:
+                st.metric("Total Tasks", len(filtered))
+            with m2:
+                if 'Status' in filtered.columns:
+                    st.metric("Pending", len(filtered[filtered['Status'] != 'Done']))
+            with m3:
+                if 'Priority' in filtered.columns:
+                    st.metric("High Priority", len(filtered[filtered['Priority'] == 'High']))
+            
+            if 'Owner (Team / Client)' in filtered.columns:
+                fig = px.pie(
+                    filtered['Owner (Team / Client)'].value_counts().reset_index(),
+                    values='count', names='Owner (Team / Client)',
+                    title="Tasks by Owner",
+                    color_discrete_sequence=px.colors.sequential.Viridis
+                )
+                fig.update_layout(height=400)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with st.expander("📋 View Details", expanded=True):
+                st.dataframe(filtered, use_container_width=True, hide_index=True)
+        
+        # Add similar concise layouts for other tabs...
+
+# --- Minimal Footer ---
+st.markdown("---")
+st.markdown(
+    f"<div style='text-align: center; color: #999; font-size: 0.8rem;'>"
+    f"Project Pulse • Live Data • Updated every {REFRESH_INTERVAL}s</div>",
+    unsafe_allow_html=True
+)
