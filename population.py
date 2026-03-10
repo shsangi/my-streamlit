@@ -77,11 +77,13 @@ if df is not None:
             # Show population for selected year or latest if "All"
             if selected_year != "All":
                 pop_value = display_df['Value'].sum()
+                label = f"Population ({int(selected_year)})"
             else:
                 # Get latest year population
                 latest_year = filtered_df['Year'].max()
                 pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
-            st.metric("Total Population", f"{pop_value:,.0f}")
+                label = f"Current Population ({int(latest_year)})"
+            st.metric(label, f"{pop_value:,.0f}")
         
         with col2:
             city_count = filtered_df['City'].nunique()
