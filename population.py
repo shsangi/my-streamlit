@@ -72,19 +72,21 @@ if df is not None:
         display_df = filtered_df
         year_text = "for All Years"
     
-    # Calculate population for header
+    # Calculate population and city count for header
     if selected_year != "All":
         pop_value = display_df['Value'].sum()
+        city_count = display_df['City'].nunique()
         year_display = int(selected_year)
     else:
         # Get latest year population for filtered data
         latest_year = filtered_df['Year'].max()
         pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
+        city_count = filtered_df[filtered_df['Year'] == latest_year]['City'].nunique()
         year_display = int(latest_year)
     
-    # Title with population
+    # Title with population and total cities
     with header_placeholder.container():
-        st.title(f"Population Data: {pop_value:,.0f}")
+        st.title(f"Population Data: {pop_value:,.0f}, Total Cities: {city_count:,}")
         st.caption(f"Latest data: {year_display}")
     
     # Map and table
