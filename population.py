@@ -50,9 +50,9 @@ if df is not None:
         selected_city = st.selectbox("City", ["All"] + city_options)
     
     with col3:
-        selected_year = st.selectbox("Year", ["Latest"] + years)
+        selected_year = st.selectbox("Year", ["All"] + years)
     
-    # Filter data
+    # Filter data based on country and city only
     filtered_df = df.copy()
     
     if selected_country != "All":
@@ -61,53 +61,65 @@ if df is not None:
     if selected_city != "All":
         filtered_df = filtered_df[filtered_df['City'] == selected_city]
     
-    # Get data for selected year or latest
-    if selected_year == "Latest":
-        display_df = filtered_df.sort_values('Year').groupby(['Country or Area', 'City']).last().reset_index()
-        year_display = f"Latest (up to {int(display_df['Year'].max())})"
-    else:
+    # Further filter by year for display if specific year selected
+    if selected_year != "All":
         display_df = filtered_df[filtered_df['Year'] == selected_year]
-        year_display = str(int(selected_year))
+        year_text = f"for {int(selected_year)}"
+    else:
+        display_df = filtered_df
+        year_text = "for All Years"
     
     # Score cards
-    if not display_df.empty:
+    if not filtered_df.empty:
         col1, col2 = st.columns(2)
         
         with col1:
-            total_pop = display_df['Value'].sum()
-            st.metric(f"Total Population ({year_display})", f"{total_pop:,.0f}")
+            # Show population for selected year or latest if "All"
+            if selected_year != "All":
+                pop_value = display_df['Value'].sum()
+            else:
+                # Get latest year population
+                latest_year = filtered_df['Year'].max()
+                pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
+            st.metric("Total Population", f"{pop_value:,.0f}")
         
         with col2:
-            city_count = display_df['City'].nunique()
+            city_count = filtered_df['City'].nunique()
             st.metric("Number of Cities", city_count)
         
         # Two columns for map and table
         map_col, table_col = st.columns(2)
         
         with map_col:
-            st.subheader("Map")
+            st.subheader(f"Map {year_text}")
             if 'lat' in display_df.columns and 'lng' in display_df.columns:
-                fig = px.scatter_mapbox(
-                    display_df,
-                    lat='lat',
-                    lon='lng',
-                    size='Value',
-                    hover_name='City',
-                    hover_data={'Country or Area': True, 'Value': ':,.0f'},
-                    zoom=1,
-                    height=500
-                )
-                fig.update_layout(mapbox_style='carto-positron', margin={"r":0,"t":0,"l":0,"b":0})
-                st.plotly_chart(fig, use_container_width=True)
+                if not display_df.empty:
+                    fig = px.scatter_mapbox(
+                        display_df,
+                        lat='lat',
+                        lon='lng',
+                        size='Value',
+                        hover_name='City',
+                        hover_data={'Country or Area': True, 'Year': True, 'Value': ':,.0f'},
+                        zoom=1,
+                        height=500
+                    )
+                    fig.update_layout(mapbox_style='carto-positron', margin={"r":0,"t":0,"l":0,"b":0})
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No data for selected year")
             else:
                 st.info("Location data not available")
         
         with table_col:
-            st.subheader("Table")
-            table_data = display_df[['Country or Area', 'City', 'Year', 'Value']].copy()
-            table_data['Value'] = table_data['Value'].apply(lambda x: f"{x:,.0f}")
-            table_data.columns = ['Country', 'City', 'Year', 'Population']
-            st.dataframe(table_data, use_container_width=True, height=500)
+            st.subheader(f"Table {year_text}")
+            if not display_df.empty:
+                table_data = display_df[['Country or Area', 'City', 'Year', 'Value']].copy()
+                table_data['Value'] = table_data['Value'].apply(lambda x: f"{x:,.0f}")
+                table_data.columns = ['Country', 'City', 'Year', 'Population']
+                st.dataframe(table_data, use_container_width=True, height=500)
+            else:
+                st.info("No data for selected year")
     
     else:
         st.warning("No data for selected filters")
