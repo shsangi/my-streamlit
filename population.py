@@ -32,13 +32,8 @@ if df is not None:
     cities = sorted(df['City'].unique())
     years = sorted(df['Year'].unique(), reverse=True)
     
-    # Filter data based on selections (will be updated after dropdowns)
-    filtered_df = df.copy()
-    display_df = df.copy()
-    
     # Create placeholders for dynamic content
     header_placeholder = st.empty()
-    metrics_placeholder = st.empty()
     filters_placeholder = st.empty()
     map_table_placeholder = st.empty()
     
@@ -47,7 +42,7 @@ if df is not None:
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            selected_country = st.selectbox("Country", ["All"] + countries, key="country")
+            selected_country = st.selectbox("Country", ["All"] + countries, index=0, key="country")
         
         with col2:
             # Filter cities based on selected country
@@ -77,72 +72,53 @@ if df is not None:
         display_df = filtered_df
         year_text = "for All Years"
     
-    # Score cards
-    if not filtered_df.empty:
-        with header_placeholder.container():
-            # Show population for selected year or latest if "All"
-            if selected_year != "All":
-                pop_value = display_df['Value'].sum()
-            else:
-                # Get latest year population
-                latest_year = filtered_df['Year'].max()
-                pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
-            
-            # Title with population
-            st.title(f"Population Data: {pop_value:,.0f}")
-        
-        with metrics_placeholder.container():
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if selected_year != "All":
-                    label = f"Population ({int(selected_year)})"
-                else:
-                    latest_year = filtered_df['Year'].max()
-                    label = f"Current Population ({int(latest_year)})"
-                st.metric(label, f"{pop_value:,.0f}")
-            
-            with col2:
-                city_count = filtered_df['City'].nunique()
-                st.metric("Number of Cities", city_count)
-        
-        with map_table_placeholder.container():
+    # Calculate population for header
+    if selected_year != "All":
+        pop_value = display_df['Value'].sum()
+        year_display = int(selected_year)
+    else:
+        # Get latest year population for filtered data
+        latest_year = filtered_df['Year'].max()
+        pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
+        year_display = int(latest_year)
+    
+    # Title with population
+    with header_placeholder.container():
+        st.title(f"Population Data: {pop_value:,.0f}")
+        st.caption(f"Latest data: {year_display}")
+    
+    # Map and table
+    with map_table_placeholder.container():
+        if not filtered_df.empty and not display_df.empty:
             # Two columns for map and table
             map_col, table_col = st.columns(2)
             
             with map_col:
                 st.subheader(f"Map {year_text}")
                 if 'lat' in display_df.columns and 'lng' in display_df.columns:
-                    if not display_df.empty:
-                        fig = px.scatter_mapbox(
-                            display_df,
-                            lat='lat',
-                            lon='lng',
-                            size='Value',
-                            hover_name='City',
-                            hover_data={'Country or Area': True, 'Year': True, 'Value': ':,.0f'},
-                            zoom=1,
-                            height=500
-                        )
-                        fig.update_layout(mapbox_style='carto-positron', margin={"r":0,"t":0,"l":0,"b":0})
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No data for selected year")
+                    fig = px.scatter_mapbox(
+                        display_df,
+                        lat='lat',
+                        lon='lng',
+                        size='Value',
+                        hover_name='City',
+                        hover_data={'Country or Area': True, 'Year': True, 'Value': ':,.0f'},
+                        zoom=1,
+                        height=500
+                    )
+                    fig.update_layout(mapbox_style='carto-positron', margin={"r":0,"t":0,"l":0,"b":0})
+                    st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("Location data not available")
             
             with table_col:
                 st.subheader(f"Table {year_text}")
-                if not display_df.empty:
-                    table_data = display_df[['Country or Area', 'City', 'Year', 'Value']].copy()
-                    table_data['Value'] = table_data['Value'].apply(lambda x: f"{x:,.0f}")
-                    table_data.columns = ['Country', 'City', 'Year', 'Population']
-                    st.dataframe(table_data, use_container_width=True, height=500)
-                else:
-                    st.info("No data for selected year")
-    
-    else:
-        st.warning("No data for selected filters")
+                table_data = display_df[['Country or Area', 'City', 'Year', 'Value']].copy()
+                table_data['Value'] = table_data['Value'].apply(lambda x: f"{x:,.0f}")
+                table_data.columns = ['Country', 'City', 'Year', 'Population']
+                st.dataframe(table_data, use_container_width=True, height=500)
+        else:
+            st.warning("No data for selected filters")
 
 else:
     st.error("Failed to load data")
