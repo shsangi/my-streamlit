@@ -74,20 +74,27 @@ if df is not None:
     
     # Calculate population and city count for header
     if selected_year != "All":
+        # For specific year, sum all values in that year
         pop_value = display_df['Value'].sum()
         city_count = display_df['City'].nunique()
         year_display = int(selected_year)
+        header_text = f"World Population: {pop_value:,.0f}, Total Cities: {city_count:,}"
     else:
-        # Get latest year population for filtered data
+        # For "All" years, get the latest year's data for the header
         latest_year = filtered_df['Year'].max()
-        pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
-        city_count = filtered_df[filtered_df['Year'] == latest_year]['City'].nunique()
+        latest_data = filtered_df[filtered_df['Year'] == latest_year]
+        pop_value = latest_data['Value'].sum()
+        city_count = latest_data['City'].nunique()
         year_display = int(latest_year)
+        header_text = f"World Population: {pop_value:,.0f}, Total Cities: {city_count:,}"
     
     # Title with population and total cities
     with header_placeholder.container():
-        st.title(f"Population Data: {pop_value:,.0f}, Total Cities: {city_count:,}")
-        st.caption(f"Latest data: {year_display}")
+        st.title(header_text)
+        if selected_year == "All":
+            st.caption(f"Showing latest data from {year_display} (select specific year to see historical data)")
+        else:
+            st.caption(f"Data for year {year_display}")
     
     # Map and table
     with map_table_placeholder.container():
@@ -121,6 +128,16 @@ if df is not None:
                 st.dataframe(table_data, use_container_width=True, height=500)
         else:
             st.warning("No data for selected filters")
+
+    # Debug info - remove in production
+    with st.expander("Debug Info"):
+        st.write(f"Total records: {len(df)}")
+        st.write(f"Total unique cities: {df['City'].nunique()}")
+        st.write(f"Total unique countries: {df['Country or Area'].nunique()}")
+        st.write(f"Year range: {df['Year'].min():.0f} - {df['Year'].max():.0f}")
+        st.write(f"Sample of latest year data ({df['Year'].max():.0f}):")
+        latest_sample = df[df['Year'] == df['Year'].max()].head()
+        st.dataframe(latest_sample[['Country or Area', 'City', 'Value']])
 
 else:
     st.error("Failed to load data")
