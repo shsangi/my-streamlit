@@ -9,8 +9,7 @@ st.set_page_config(page_title="Population Data", layout="wide")
 # Google Sheets CSV URL
 GSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQY4rE12Yqty9vWRQjteO0Zs9nvCFBuzfI30iqZW8wdkjcVc8aqmsTNcc_QGHYgTdiofjSjopQ25_ZK/pub?gid=1256584885&single=true&output=csv"
 
-# Title
-st.title("Population Data")
+
 
 # Load data
 @st.cache_data
@@ -82,8 +81,11 @@ if df is not None:
                 # Get latest year population
                 latest_year = filtered_df['Year'].max()
                 pop_value = filtered_df[filtered_df['Year'] == latest_year]['Value'].sum()
+                
                 label = f"Current Population ({int(latest_year)})"
-            st.metric(label, f"{pop_value:,.0f}")
+            # Title
+            st.title(f"Population Data {pop_value:,.0f}")
+            #st.metric(label, f"{pop_value:,.0f}")
         
         with col2:
             city_count = filtered_df['City'].nunique()
